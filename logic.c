@@ -18,6 +18,8 @@
 //      MA 02110-1301, USA.
 
 
+
+
 struct Ball {
     int x; int y; //x, y coordinates
     int px; int py; //the previous position of the ball, used when drawing it
@@ -40,19 +42,23 @@ struct Paddle {
     int vel; //the amount it moves
 };
 
-void check_ball(struct Ball *ball, int boundx, int boundy)
+int check_ball(struct Ball* ball, int boundx, int boundy)
 /*Check whether the ball is out of boundaries,
  * and if it is, it changes the velocity accordingly*/
 {
     if ((ball->x > boundx) || (ball->x < 0)){
         ball->vx = -ball->vx;
+        return 1;
     }
     if ((ball->y > boundy) || (ball->y < 0)){
         ball->vy = -ball->vy;
+        return 1;
     }
+    
+    return 0;
 }
 
-void move_ball(struct Ball *ball)
+void move_ball(struct Ball* ball)
 /*Move the ball*/
 {
     ball->px = ball->x;
@@ -61,7 +67,7 @@ void move_ball(struct Ball *ball)
     ball->y += ball->vy;
 }
 
-void move_paddle(int dir, struct Paddle *paddle, int maxy)
+void move_paddle(int dir, struct Paddle* paddle, int maxy)
 /*Move the paddle in dir. If dir is true, move up, else move down.
  * This also wraps around the top and bottom of the screen.*/
 {
@@ -85,7 +91,7 @@ int between(int x, int a, int b)
     return 0;
 }
 
-int collision(struct Ball *ball, struct Paddle *paddle)
+int collision(struct Ball* ball, struct Paddle* paddle)
 /*Check for collision between ball and bat.
  * return 1 if there is a collision
  * return -1 if the ball has gone over the boundary
@@ -100,3 +106,5 @@ int collision(struct Ball *ball, struct Paddle *paddle)
     }
     return 0;
 }
+
+

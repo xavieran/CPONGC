@@ -22,80 +22,49 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+
 #include <curses.h>
+#include <menu.h>
 
-#include "misc.h"
-
-
-
-
-
-
-
-void draw_paddle(struct Paddle * paddle, int color)
-/*Draw the paddle in color*/
-{
-    int top = paddle->y - paddle->width;
-    int bottom = paddle->y + paddle->width;
-    attron(COLOR_PAIR(color));
-    for (; top < bottom; top++){
-        mvaddch(top, paddle->x, '|');
-    }
-    attroff(COLOR_PAIR(color));
-}
-
-
-int draw_color(int y, int x, char txt, int color)
-{
-    mvaddch(y, x, txt | COLOR_PAIR(color));
-    return 0;
-}
-
-int die()
-{
-    endwin();
-    printf("%s","FINISHED\n");
-    exit(0);
-    return 0;
-}
+#include "logic.h"
+#include "draw.h"
+#include "init.h"
+#include "sound.h"
 
 
 
-int main()
+
+int game(int b_width, int b_height)
 {
     //Create the ball & padlle
 
-    struct Ball ball = {.y=2, .x=2, .vx=3, .vy=1};
-    struct Ball *pball = &ball;
+    struct Ball ball = {.y=2, .x=2, .px=0, .py=0, .vx=2, .vy=1};
+    struct Ball* pball = &ball;
 
-    struct Paddle paddle = {.y=12, .x=2, .width=2, .vel=2};
-    struct Paddle *ppaddle = &paddle;
+    struct Paddle paddle = {.y=12, .x=0, .px=0, .py=0, .width=7, .vel=2};
+    struct Paddle* ppaddle = &paddle;
     
-    /////////////
-    //CURSES
-
-    initscr();
-    cbreak();
-    keypad(stdscr, TRUE);
-    noecho();
-    curs_set(0); //turn cursor off
-    nodelay(stdscr, 1);
-    
-    //We want color
-    start_color();
-    init_pair(COLOR_RED, COLOR_RED, COLOR_RED);
-    init_pair(COLOR_GREEN, COLOR_GREEN, COLOR_GREEN);
-    int RED_ON_WHITE = 3;
-    init_pair(RED_ON_WHITE, COLOR_RED, COLOR_WHITE);
+    initialize();
     
     //Screen size
     int boundy;
     int boundx;
-    getmaxyx(stdscr, boundy, boundx);
+    WINDOW *board = make_newwin(b_height, b_width, 0, 0, COLOR_GREEN);
+    getmaxyx(board, boundy, boundx);
+    boundx -= 1; //So stuff does not touch the border...
+    boundy -= 1;
+    
+    //Create the windows
+    
+    WINDOW *status = make_newwin(b_height, boundx-b_height, 0, b_width+1, COLOR_RED);
+    box(status, 0, 0);
+
 
     //Main loop
     int key;
     int lives = 2;
+    int score = 0;
+    int coll;
     while (lives){
     //CONTROLLER:
         key = getch();
@@ -110,29 +79,46 @@ int main()
                 break;
             }
     //MODEL
-        check_ball(pball, boundx, boundy);
+        if (check_ball(pball, boundx, boundy)) fbeep(440, 20);
         move_ball(pball);
-        //Check whether the ball has hit the bat or not...
-        if ((ball.x+ball.vx < paddle.x) &&
-            ((ball.y < paddle.y + paddle.width) && (ball.y > paddle.y - paddle.width))){
-            ball.x = paddle.x+1;
-            ball.vx = -ball.vx;
-        } else if (ball.x <= 0){
-            mvaddstr(0,0, "Lost a life");
-            lives--;
-        }
+        coll = collision(pball, ppaddle);//Check whether the ball has hit
+        if (coll) fbeep(660, 20);
+        switch (coll){
+            case 1:
+                ball.vx = -ball.vx;
+                ball.x = paddle.x+1;
+                break;
+            case -1:
+                ball.vx = abs(ball.vx);
+                ball.x = boundx/2;
+                ball.y = boundy/2;
+                lives--;
+                break;
+            case 0:
+                break;
+            }
     //VIEW:
-        clear();
-        draw_paddle(ppaddle, COLOR_RED);
-        draw_color(ball.y, ball.x, 'O', RED_ON_WHITE);
-        mvprintw(0,0,"Lives:%d", lives);
-        refresh();
+        if ((ball.y < paddle.y + paddle.width) && (ball.y > paddle.y - paddle.width)){
+            draw_ball(board, pball, COLOR_GREEN);
+            draw_paddle(board, ppaddle, COLOR_GREEN);
+        }else {
+            draw_ball(board, pball, COLOR_RED);
+            draw_paddle(board, ppaddle, COLOR_RED);}
+        mvwprintw(status, 2, 1, "Lives:%d", lives);
+        mvwprintw(status, 3, 1, "Score:%d", score);
+        wrefresh(board);
+        wrefresh(status);
         //usleep takes microseconds which is 1/1000th of a millisecond
         //TODO: Figure out a good value for it...
-        usleep(50000);
+        usleep(100000);
         
     }
-    /////////////
-    
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    /*Make the game menu 'ere*/
+    game(70,24);
     return die();
 }

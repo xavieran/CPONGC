@@ -19,24 +19,45 @@
 
 
 #include <curses.h>
-#include "misc.h"
+#include "logic.h"
 
 
-void draw_paddle(struct Paddle * paddle, int color)
+int draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
 /*Draw the paddle in color*/
 {
-    int top = paddle->y - paddle->width;
-    int bottom = paddle->y + paddle->width;
-    attron(COLOR_PAIR(color));
-    for (; top < bottom; top++){
-        mvaddch(top, paddle->x, '|');
+    //Erase the paddle
+    int top = paddle->py + paddle->width;
+    int y = paddle->py;
+    for (; y < top; y++){
+        mvwaddch(win, y, paddle->px, ' ');
     }
-    attroff(COLOR_PAIR(color));
+    //Now draw it again
+    top = paddle->y + paddle->width;
+    y = paddle->y;
+    wattron(win, COLOR_PAIR(color));
+    for (; y < top; y++){
+        mvwaddch(win, y, paddle->x, ' ');
+    }
+    wattroff(win, COLOR_PAIR(color));
+    return 0;
 }
 
-
-int draw_color(int y, int x, char txt, int color)
+int draw_ball(WINDOW* win, struct Ball* ball, int color)
 {
-    mvaddch(y, x, txt | COLOR_PAIR(color));
+    mvwaddch(win, ball->py, ball->px, ' '); //erase the previous image
+    mvwaddch(win, ball->y, ball->x, 'O' | COLOR_PAIR(color));
     return 0;
+}
+
+    
+int draw_color(WINDOW* win, int y, int x, char txt, int color)
+{
+    mvwaddch(win, y, x, txt | COLOR_PAIR(color));
+    return 0;
+}
+
+WINDOW* make_newwin(int height, int width, int starty, int startx, int color)
+{
+    WINDOW* win = newwin(height, width, starty, startx);
+    return win;
 }

@@ -18,8 +18,10 @@
 //      MA 02110-1301, USA.
 
 
-#ifndef MISC_H
-#define MISC_H
+#ifndef LOGIC_H
+#define LOGIC_H
+
+#include <stdio.h>
 
 struct Ball {
     int x; int y;
@@ -34,12 +36,12 @@ struct Paddle {
     int vel;
 };
 
-void check_ball(struct Ball * ball, int boundx, int boundy);
+int check_ball(struct Ball* ball, int boundx, int boundy);
 
-void move_ball(struct Ball * ball);
+void move_ball(struct Ball* ball);
 
-void move_paddle(int dir, struct Paddle * paddle, int maxy);
+void move_paddle(int dir, struct Paddle* paddle, int maxy);
 
-int collision(struct Ball *ball, struct Paddle *paddle);
+int collision(struct Ball* ball, struct Paddle* paddle);
 
 #endif

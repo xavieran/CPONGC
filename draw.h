@@ -20,10 +20,14 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-#include "misc.h"
+#include "logic.h"
 
-void draw_paddle(struct Paddle * paddle, int color);
+int draw_paddle(WINDOW* win, struct Paddle* paddle, int color);
 
-int draw_color(int y, int x, char txt, int color);
+int draw_ball(WINDOW* win, struct Ball* ball, int color);
 
+int draw_color(WINDOW* win, int y, int x, char txt, int color);
+
+
+WINDOW* make_newwin(int height, int width, int starty, int startx, int color);
 #endif

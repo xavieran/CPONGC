@@ -29,7 +29,11 @@ enum colors {
         BLUE,
         MAGENTA,
         CYAN,
-        WHITE
+        WHITE,
+        BLUE_ON_BLACK,
+        RED_ON_BLACK,
+        YELLOW_ON_BLACK,
+        GREEN_ON_BLACK
         };
 
 
@@ -53,6 +57,10 @@ int initialize()
     init_pair(MAGENTA, COLOR_MAGENTA, COLOR_MAGENTA);
     init_pair(CYAN, COLOR_CYAN, COLOR_CYAN);
     init_pair(WHITE, COLOR_WHITE, COLOR_WHITE);
+    init_pair(BLUE_ON_BLACK, COLOR_BLUE, COLOR_BLACK);
+    init_pair(RED_ON_BLACK, COLOR_RED, COLOR_BLACK);
+    init_pair(YELLOW_ON_BLACK, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(GREEN_ON_BLACK, COLOR_GREEN, COLOR_BLACK);
     return 0;    
 }
 

@@ -1,4 +1,4 @@
-//      init.h
+//      fancymenu.h
 //      
 //      Copyright 2009 Emmanuel Jacyna <xavieran.lives@gmail.com>
 //      
@@ -14,32 +14,30 @@
 //      
 //      You should have received a copy of the GNU General Public License
 //      along with this program; if not, write to the Free Software
-//      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,5
+//      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 //      MA 02110-1301, USA.
 
 
-#ifndef INIT_H
-#define INIT_H
+#include <ncurses.h>
 
-#include <curses.h>
+#include <stdlib.h>
+#include <ncurses.h>
+#include <string.h>
+#include <unistd.h>
 
 
-enum colors {
-        BLACK,
-        RED,
-        GREEN,
-        YELLOW,
-        BLUE,
-        MAGENTA,
-        CYAN,
-        WHITE,
-        BLUE_ON_BLACK,
-        RED_ON_BLACK,
-        YELLOW_ON_BLACK,
-        GREEN_ON_BLACK
-        };
+struct Menu {
+    WINDOW* win;
+    int selected;
+    int animcnt;
+    int ITEM_COLOR;
+    int SEL_ITEM_COLOR;
+    int num_items;
+    char** items;
+};
 
-int initialize();
-int die();
+struct Menu* new_menu(int startx, int starty, int num_items, char** items, int ITEM_COLOR, int SEL_ITEM_COLOR);
 
-#endif
+void draw_menu(struct Menu* menu);
+
+int poll_menu(struct Menu* menu);

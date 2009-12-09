@@ -23,6 +23,11 @@
 #ifndef SOUND_H
 #define SOUND_H
 
+enum notes {
+    A = 440
+    };
+
+
 void fbeep(int freq, int length)
 /*This function grabbed from console_beep V0.1  by Josef Pavlik <jetset@ibm.net>
  *and slightly modified to work without dest*/

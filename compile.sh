@@ -1,5 +1,5 @@
 #!/bin/sh
-INCLUDES="-lncurses -lmenu"
+INCLUDES="-lncurses"
 INCLUDE_DIR="./"
 EXE="game.x"
 

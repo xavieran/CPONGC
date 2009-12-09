@@ -19,6 +19,7 @@
 
 
 #include <curses.h>
+
 #include "logic.h"
 
 

@@ -24,12 +24,12 @@
 #include <string.h>
 
 #include <curses.h>
-#include <menu.h>
 
 #include "logic.h"
 #include "draw.h"
 #include "init.h"
 #include "sound.h"
+#include "fancymenu.h"
 
 
 
@@ -44,7 +44,7 @@ int game(int b_width, int b_height)
     struct Paddle paddle = {.y=12, .x=0, .px=0, .py=0, .width=7, .vel=2};
     struct Paddle* ppaddle = &paddle;
     
-    initialize();
+    
     
     //Screen size
     int boundy;
@@ -98,12 +98,12 @@ int game(int b_width, int b_height)
                 break;
             }
     //VIEW:
-        if ((ball.y < paddle.y + paddle.width) && (ball.y > paddle.y - paddle.width)){
-            draw_ball(board, pball, COLOR_GREEN);
-            draw_paddle(board, ppaddle, COLOR_GREEN);
+        if ((ball.y > paddle.y) && (ball.y < paddle.y + paddle.width)){
+            draw_ball(board, pball, GREEN);
+            draw_paddle(board, ppaddle, GREEN);
         }else {
-            draw_ball(board, pball, COLOR_RED);
-            draw_paddle(board, ppaddle, COLOR_RED);}
+            draw_ball(board, pball, RED);
+            draw_paddle(board, ppaddle, RED);}
         mvwprintw(status, 2, 1, "Lives:%d", lives);
         mvwprintw(status, 3, 1, "Score:%d", score);
         wrefresh(board);
@@ -116,9 +116,26 @@ int game(int b_width, int b_height)
     return 1;
 }
 
-int main(int argc, char **argv)
+    
+int main(int argc,char **argv)
 {
+    initialize();
+    char* items[2] = {"New Game", "Quit"};
+    struct Menu* menu = new_menu(6, 2, 2, items, BLUE_ON_BLACK, GREEN_ON_BLACK);
+    int x;
+    while (1){
+        x = poll_menu(menu);
+        switch (x){
+            case 0:
+                game(70,24);
+                break;
+            case 1:
+                endwin();
+                exit(0);
+                break;
+            }
+        }
+    
     /*Make the game menu 'ere*/
-    game(70,24);
     return die();
 }

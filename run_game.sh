@@ -1,3 +1,3 @@
 #!/bin/sh
 
-xterm -e "./game.x"
+xterm -e "./pong"

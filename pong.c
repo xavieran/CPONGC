@@ -19,12 +19,13 @@
 //      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 //      MA 02110-1301, USA.
 
+//Satisfy GCC
+#define _BSD_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <math.h>
-#include <string.h>
 
 #include <curses.h>
 
@@ -33,9 +34,10 @@
 
 //Initial ball velocity
 #define EASY_BALL_VX .2
-#define EASY_BALL_VY .1
+#define EASY_BALL_VY .075
+
 //Amount ball velocity increases per hit
-#define EASY_BALL_V_INC .05
+#define EASY_BALL_V_INC .02
 
 
 //#include "sound.h"
@@ -391,12 +393,25 @@ int lines_intersect(float p0_x, float p0_y, float p1_x, float p1_y,
 
 int ball_intersect_paddle(struct Ball* ball, struct Paddle* paddle)
 {
-    if (lines_intersect(ball->px, ball->py, ball->x, ball->y, paddle->x, 
+    if (lines_intersect(ball->x, ball->y, ball->px, ball->py, paddle->x, 
                         paddle->y + paddle->width, paddle->x, paddle->y)){
         return 1;
     }
     return 0;
 }
+
+//Calculate the distance from the center of the paddle to where the ball has
+//struck.
+//Return the percentage such that p == 1 means that the ball has hit
+//the very edge, and p == 0 means that the ball has hit the center
+float collision_dist_prcnt(struct Ball* ball, struct Paddle* paddle)
+{
+    float paddle_center = (float) paddle->y + ((float) paddle->width / 2.0);
+    float dist = abs(paddle_center - ball->y);
+    float prcnt = dist / ((float) paddle->width / 2.0);
+    return prcnt;
+}
+
 
 // Drawing Functions: 
 void initialize_colors()
@@ -459,10 +474,11 @@ void erase_paddle(WINDOW* win, struct Paddle* paddle)
 
 void draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
 {
+    //NOTE THAT I HAVE DONE THIS TO TEST MY KINDNESS THEORY!!!
     int y;
-    int bottom = paddle->y + paddle->width;
+    int bottom = paddle->y + paddle->width - 1;
     wattron(win, COLOR_PAIR(color));
-    for (y = paddle->y; y <= bottom; y++){
+    for (y = paddle->y + 1; y <= bottom; y++){
         mvwaddch(win, y, paddle->x, '|');
     }
     wattroff(win, COLOR_PAIR(color));
@@ -481,6 +497,7 @@ int main(int argc, char** argv)
 {
     WINDOW* win = malloc(sizeof(WINDOW));
     win = initscr();
+    //win = newwin(
     initialize_colors();
     cbreak();
     keypad(stdscr, TRUE);
@@ -490,7 +507,8 @@ int main(int argc, char** argv)
 
     struct Game* game = make_game(2, 0, 80, 24);
     struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
-    struct Paddle* paddle = make_paddle(0, game->height/2, 5, 2);
+    struct Paddle* paddle1 = make_paddle(0, game->height/2, 6, 3);
+    struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 6, 3);
 
     int tick_time = 10;
     
@@ -499,63 +517,89 @@ int main(int argc, char** argv)
     
     while ((key = getch()) != KEY_RIGHT){
         switch (key) {
-            case KEY_UP:
-                //if ((paddle->y - paddle->vel) < 0){
-                check_pad = move_paddle_dir_f(*paddle, UP);
+            case 'w':
+                check_pad = move_paddle_dir_f(*paddle1, UP);
                 if (check_pad.y < 0){
-                    move_paddle_xy(paddle, paddle->x, game->height-paddle->width);
-                }else { move_paddle_dir(paddle, UP);
+                    move_paddle_xy(paddle1, paddle1->x, game->height - paddle1->width);
+                }else { move_paddle_dir(paddle1, UP);
                 }
                 break;
+                
+            case 's':
+                if ((paddle1->y + paddle1->vel + paddle1->width)  > game->height){
+                    move_paddle_xy(paddle1, paddle1->x, 0);
+                }else { move_paddle_dir(paddle1, DOWN);
+                }
+                break;
+                
+            case KEY_UP:
+                check_pad = move_paddle_dir_f(*paddle2, UP);
+                if (check_pad.y < 0){
+                    move_paddle_xy(paddle2, paddle2->x, game->height - paddle2->width);
+                }else { move_paddle_dir(paddle2, UP);
+                }
+                break;
+                
             case KEY_DOWN:
-                if ((paddle->y + paddle->vel + paddle->width)  > game->height){
-                    move_paddle_xy(paddle, paddle->x, 0);
-                }else { move_paddle_dir(paddle, DOWN);
+                if ((paddle2->y + paddle2->vel + paddle2->width)  > game->height){
+                    move_paddle_xy(paddle2, paddle2->x, 0);
+                }else { move_paddle_dir(paddle2, DOWN);
                 }
                 break;
         }
 
-        /*int tmp = ball_intersect_paddle(ball, paddle);
-        if (tmp){
-           move_ball_xy(ball, paddle->x+1, paddle->y);
-           ball->vx = abs(ball->vx);
-        }else if ((!tmp) && (ball->x < 0)){
-           move_ball_xy(ball, game->width/2, game->height/2);
-        }*/
-
-        if ((ball->x < paddle->x) && ((ball->y <= (paddle->y + paddle->width)) &&
-              (ball->y >= paddle->y))){
-            move_ball_xy(ball, paddle->x+1, ball->y);
+        //Ball has collided with paddle1
+        if ((ball->x <= paddle1->x) && ball_intersect_paddle(ball, paddle1)){
+            //Move the ball 1 forward from paddle, this paddle is on left
+            move_ball_xy(ball, paddle1->x + 1, ball->y);
+            //Flip the ball's direction
             ball->vx = -ball->vx;
-            //Calculate how the velocity should be affected...
-            // Do this by calculating the distance between the center of the paddle and
-            //where the ball has hit!
-            float paddle_center = (float) paddle->y + ((float) paddle->width / 2.0);
-            float dist = abs(paddle_center - ball->y);
-            float prcnt = dist / ((float) paddle->width / 2.0);
+            
+            float prcnt = collision_dist_prcnt(ball, paddle1);
             float vxi = (1 - prcnt) * EASY_BALL_V_INC;
             float vyi = prcnt * EASY_BALL_V_INC;
             
             ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
             ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
 
+        } else if (ball->x <= paddle1->x){
             //Increase score...
-        } else if (ball->x < paddle->x){
             ball->vx = EASY_BALL_VX;
             ball->vy = EASY_BALL_VY;
-            move_ball_xy(ball, game->width/2, game->height/2);
+            move_ball_xy(ball, game->width / 2, game->height / 2);
+        }
+        
+        //Ball has collided with paddle2
+        if ((ball->x >= paddle2->x) && ball_intersect_paddle(ball, paddle2)){
+            //Move the ball 1 back from the paddle, this paddle is the one on right...
+            move_ball_xy(ball, paddle2->x - 1, ball->y);
+            ball->vx = -ball->vx;
+            
+            float prcnt = collision_dist_prcnt(ball, paddle2);
+            float vxi = (1 - prcnt) * EASY_BALL_V_INC;
+            float vyi = prcnt * EASY_BALL_V_INC;
+            
+            ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
+            ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
+
+        } else if (ball->x >= paddle2->x){
+            //Increase score...
+            ball->vx = -(EASY_BALL_VX);
+            ball->vy = EASY_BALL_VY;
+            move_ball_xy(ball, game->width / 2, game->height / 2);
         }
         
         //We need to erase it now because???
         erase_ball(win, ball);
 
-        if ((ball->x > game->width) || (ball->x < 0)){ball->vx = -ball->vx;}
-        if ((ball->y > game->height) || (ball->y < 0)){ball->vy = -ball->vy;}
+        if ((ball->y > game->height) || (ball->y < 0)) ball->vy = -ball->vy;
 
         move_ball(ball);
         
         erase_draw_ball(win, ball, RED);
-        erase_draw_paddle(win, paddle, BLUE);
+        
+        erase_draw_paddle(win, paddle1, BLUE);
+        erase_draw_paddle(win, paddle2, GREEN);
         
         usleep(tick_time*1000);
         refresh();

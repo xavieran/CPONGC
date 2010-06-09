@@ -24,10 +24,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <math.h>
 
 #include <curses.h>
+
+#define MAX_STRING_LENGTH 256
 
 #define LIFETIME_MAX 16
 #define GRAVITY_MAX 3
@@ -37,7 +41,9 @@
 #define EASY_BALL_VY .075
 
 //Amount ball velocity increases per hit
-#define EASY_BALL_V_INC .02
+#define EASY_BALL_V_INC .05
+
+#define INFO_WIN_HEIGHT 3
 
 
 //#include "sound.h"
@@ -97,6 +103,12 @@ float abs_float(float x)
     return x;
 }
 
+int my_int(float x)
+{
+    if ((x - ((int) x)) > .5) return ((int) x) + 1;
+    return (int) x;
+}
+    
 /*++++++++++++++
  BALL STRUCTURE
  ++++++++++++++*/
@@ -329,21 +341,25 @@ struct Particle** move_particles_array(struct Particle** particles)
  GAME STRUCTURE
  ++++++++++++++*/
 struct Game {
-   int lives;
-   int score;
-   int width;
-   int height;
+    int width;
+    int height;
+    int p1_score;
+    int p2_score;
+    char* p1_name;
+    char* p2_name;
 };
 
 
-struct Game* make_game(int lives, int score, int width, int height)
+struct Game* make_game(int width, int height, char* p1_name, char* p2_name)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
-    p->lives = lives; 
-    p->score = score;
     p->width = width;
     p->height = height;
+    p->p1_score = 0;
+    p->p2_score = 0;
+    p->p1_name = p1_name;
+    p->p2_name = p2_name;
     return p;
 }
 
@@ -356,8 +372,8 @@ void destroy_game(struct Game* game)
 char* str_game(struct Game* game)
 {
    char* msg = malloc(sizeof(char)*256);
-   sprintf(msg, "lives:%d  score:%d  (w, h): (%d, %d)",
-         game->lives, game->score, game->width, game->height);
+   sprintf(msg, "p1 score:%d  p2 score:%d  (w, h): (%d, %d)",
+         game->p1_score, game->p2_score, game->width, game->height);
    return msg;
 
 }
@@ -397,6 +413,18 @@ int ball_intersect_paddle(struct Ball* ball, struct Paddle* paddle)
                         paddle->y + paddle->width, paddle->x, paddle->y)){
         return 1;
     }
+    return 0;
+}
+
+//Return 0 if ball within paddle, 1 if ball above paddle, -1 if ball below paddle
+int ball_in_paddle(struct Ball* ball, struct Paddle* paddle)
+{
+    if (ball->y > (paddle->y + paddle->width)){
+        return -1;
+    } else if (ball->y < paddle->y){
+        return 1;
+    }
+
     return 0;
 }
 
@@ -453,12 +481,12 @@ void erase_rect(WINDOW* win, int y, int x, int length, int height)
 
 void erase_ball(WINDOW* win, struct Ball* ball)
 {
-    mvwaddch(win, (int)ball->py, (int)ball->px, ' ');
+    mvwaddch(win, my_int(ball->py), my_int(ball->px), ' ');
 }
 
 void draw_ball(WINDOW* win, struct Ball* ball, int color)
 {
-    mvwaddch(win, (int)ball->y, (int)ball->x, 'O' | COLOR_PAIR(color));
+    mvwaddch(win, my_int(ball->y), my_int(ball->x), 'O' | COLOR_PAIR(color));
 }
 
 void erase_draw_ball(WINDOW* win, struct Ball* ball, int color)
@@ -474,11 +502,10 @@ void erase_paddle(WINDOW* win, struct Paddle* paddle)
 
 void draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
 {
-    //NOTE THAT I HAVE DONE THIS TO TEST MY KINDNESS THEORY!!!
     int y;
-    int bottom = paddle->y + paddle->width - 1;
+    int bottom = paddle->y + paddle->width;
     wattron(win, COLOR_PAIR(color));
-    for (y = paddle->y + 1; y <= bottom; y++){
+    for (y = paddle->y; y <= bottom; y++){
         mvwaddch(win, y, paddle->x, '|');
     }
     wattroff(win, COLOR_PAIR(color));
@@ -492,40 +519,57 @@ void erase_draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
     draw_paddle(win, paddle, color);
 }                     
 
+void game(int difficulty, int ai);//...
 
 int main(int argc, char** argv)
 {
+    //Eliminate compiler warning :)
+    (void) argc;
+    (void) argv;
+
+    //clock_t previous_t = clock() / (CLOCKS_PER_SEC / 1000);
+    //clock_t current_t;
+    
+    struct Game* game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, "Gerald", "Coxswain");
+    struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
+    struct Paddle* paddle1 = make_paddle(0, game->height/2, 5, 3);
+    struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 5, 3);
+
     WINDOW* win = malloc(sizeof(WINDOW));
-    win = initscr();
-    //win = newwin(
+    initscr();
+    
+    win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
+    
+    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, 80, 0, 0);
+    
     initialize_colors();
+    
     cbreak();
     keypad(stdscr, TRUE);
     noecho();
     curs_set(0); //turn cursor off
     nodelay(stdscr, 1);
 
-    struct Game* game = make_game(2, 0, 80, 24);
-    struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
-    struct Paddle* paddle1 = make_paddle(0, game->height/2, 6, 3);
-    struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 6, 3);
-
     int tick_time = 10;
     
     int key;
     struct Paddle check_pad;
+    char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
+
     
     while ((key = getch()) != KEY_RIGHT){
+
         switch (key) {
             case 'w':
                 check_pad = move_paddle_dir_f(*paddle1, UP);
-                if (check_pad.y < 0){
+                if (check_pad.y + paddle1->vel < 0){
                     move_paddle_xy(paddle1, paddle1->x, game->height - paddle1->width);
                 }else { move_paddle_dir(paddle1, UP);
                 }
                 break;
                 
             case 's':
+                check_pad = move_paddle_dir_f(*paddle1, UP);
                 if ((paddle1->y + paddle1->vel + paddle1->width)  > game->height){
                     move_paddle_xy(paddle1, paddle1->x, 0);
                 }else { move_paddle_dir(paddle1, DOWN);
@@ -534,20 +578,35 @@ int main(int argc, char** argv)
                 
             case KEY_UP:
                 check_pad = move_paddle_dir_f(*paddle2, UP);
-                if (check_pad.y < 0){
+                if ((check_pad.y + paddle2->vel) < 0){
                     move_paddle_xy(paddle2, paddle2->x, game->height - paddle2->width);
                 }else { move_paddle_dir(paddle2, UP);
                 }
                 break;
                 
             case KEY_DOWN:
-                if ((paddle2->y + paddle2->vel + paddle2->width)  > game->height){
+                check_pad = move_paddle_dir_f(*paddle2, DOWN);
+                if (((check_pad.y + check_pad.width) - paddle2->vel)  > game->height){
                     move_paddle_xy(paddle2, paddle2->x, 0);
                 }else { move_paddle_dir(paddle2, DOWN);
                 }
                 break;
         }
 
+        //AI!!!
+        /*if (ball->vx < 0){
+            switch (ball_in_paddle(ball, paddle1)) {
+                case 0:
+                    break;
+                case 1:
+                    move_paddle_dir(paddle1, UP);
+                    break;
+                case -1:
+                    move_paddle_dir(paddle1, DOWN);
+                    break;
+            }
+        }*/
+        
         //Ball has collided with paddle1
         if ((ball->x <= paddle1->x) && ball_intersect_paddle(ball, paddle1)){
             //Move the ball 1 forward from paddle, this paddle is on left
@@ -564,6 +623,7 @@ int main(int argc, char** argv)
 
         } else if (ball->x <= paddle1->x){
             //Increase score...
+            game->p2_score++;
             ball->vx = EASY_BALL_VX;
             ball->vy = EASY_BALL_VY;
             move_ball_xy(ball, game->width / 2, game->height / 2);
@@ -584,6 +644,7 @@ int main(int argc, char** argv)
 
         } else if (ball->x >= paddle2->x){
             //Increase score...
+            game->p1_score++;
             ball->vx = -(EASY_BALL_VX);
             ball->vy = EASY_BALL_VY;
             move_ball_xy(ball, game->width / 2, game->height / 2);
@@ -593,16 +654,31 @@ int main(int argc, char** argv)
         erase_ball(win, ball);
 
         if ((ball->y > game->height) || (ball->y < 0)) ball->vy = -ball->vy;
-
+        
+        /*current_t = clock() / (CLOCKS_PER_SEC / 1000);
+        if ((current_t - previous_t) > 1) {
+            previous_t = current_t;
+            move_ball(ball);
+        }*/
+        
         move_ball(ball);
         
         erase_draw_ball(win, ball, RED);
-        
         erase_draw_paddle(win, paddle1, BLUE);
         erase_draw_paddle(win, paddle2, GREEN);
         
-        usleep(tick_time*1000);
+        //Display some info
+        box(info_win, 0 , 0);
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p1_name, game->p1_score);
+        mvwaddstr(info_win, 1, 1, tmp_str);
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p2_name, game->p2_score);
+        mvwaddstr(info_win, 1, 80 - strlen(tmp_str) - 1, tmp_str);
+        
+        wrefresh(info_win);
+        wrefresh(win);
         refresh();
+        
+        usleep(tick_time*1000);
     }
     
     die();

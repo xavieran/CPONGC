@@ -31,6 +31,11 @@
 
 #include <curses.h>
 
+#include "sound.h"
+#include "timer.h"
+//#include "fancymenu.h"
+
+
 #define MAX_STRING_LENGTH 256
 
 #define LIFETIME_MAX 16
@@ -43,11 +48,11 @@
 //Amount ball velocity increases per hit
 #define EASY_BALL_V_INC .05
 
+#define EASY_AI_WAIT 20
+
 #define INFO_WIN_HEIGHT 3
 
 
-//#include "sound.h"
-//#include "fancymenu.h"
 
 enum directions {
    UP,
@@ -521,16 +526,19 @@ void erase_draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
 
 void game(int difficulty, int ai);//...
 
+
+
 int main(int argc, char** argv)
 {
     //Eliminate compiler warning :)
     (void) argc;
     (void) argv;
 
-    //clock_t previous_t = clock() / (CLOCKS_PER_SEC / 1000);
-    //clock_t current_t;
+    clock_t previous_t = clock() / (CLOCKS_PER_SEC / 1000);
+    clock_t current_t;
+    Timer* timer = sgl_timer_new();
     
-    struct Game* game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, "Gerald", "Coxswain");
+    struct Game* game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, "Computer", "Human");
     struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
     struct Paddle* paddle1 = make_paddle(0, game->height/2, 5, 3);
     struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 5, 3);
@@ -550,14 +558,15 @@ int main(int argc, char** argv)
     curs_set(0); //turn cursor off
     nodelay(stdscr, 1);
 
-    int tick_time = 10;
+    //int tick_time = 10;
+    int ai_wait = 0;
     
     int key;
     struct Paddle check_pad;
     char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
 
     
-    while ((key = getch()) != KEY_RIGHT){
+    while ((key = getch())){// != KEY_RIGHT){
 
         switch (key) {
             case 'w':
@@ -594,7 +603,7 @@ int main(int argc, char** argv)
         }
 
         //AI!!!
-        /*if (ball->vx < 0){
+        if (ai_wait > EASY_AI_WAIT && ball->vx < 0){
             switch (ball_in_paddle(ball, paddle1)) {
                 case 0:
                     break;
@@ -605,63 +614,72 @@ int main(int argc, char** argv)
                     move_paddle_dir(paddle1, DOWN);
                     break;
             }
-        }*/
+            ai_wait = 0;
+        }
         
         //Ball has collided with paddle1
-        if ((ball->x <= paddle1->x) && ball_intersect_paddle(ball, paddle1)){
-            //Move the ball 1 forward from paddle, this paddle is on left
-            move_ball_xy(ball, paddle1->x + 1, ball->y);
-            //Flip the ball's direction
-            ball->vx = -ball->vx;
-            
-            float prcnt = collision_dist_prcnt(ball, paddle1);
-            float vxi = (1 - prcnt) * EASY_BALL_V_INC;
-            float vyi = prcnt * EASY_BALL_V_INC;
-            
-            ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
-            ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
 
-        } else if (ball->x <= paddle1->x){
-            //Increase score...
-            game->p2_score++;
-            ball->vx = EASY_BALL_VX;
-            ball->vy = EASY_BALL_VY;
-            move_ball_xy(ball, game->width / 2, game->height / 2);
-        }
         
-        //Ball has collided with paddle2
-        if ((ball->x >= paddle2->x) && ball_intersect_paddle(ball, paddle2)){
-            //Move the ball 1 back from the paddle, this paddle is the one on right...
-            move_ball_xy(ball, paddle2->x - 1, ball->y);
-            ball->vx = -ball->vx;
+        //current_t = clock() / (CLOCKS_PER_SEC / 1000);
+        if (sgl_timer_elapsed_milliseconds(timer) > 10){//((current_t - previous_t) > 1) {
+            //previous_t = current_t;
+            sgl_timer_reset(timer);
+            ai_wait++;
             
-            float prcnt = collision_dist_prcnt(ball, paddle2);
-            float vxi = (1 - prcnt) * EASY_BALL_V_INC;
-            float vyi = prcnt * EASY_BALL_V_INC;
+            if ((ball->x <= paddle1->x) && ball_intersect_paddle(ball, paddle1)){
+                fbeep(660, 10);
+                //Move the ball 1 forward from paddle, this paddle is on left
+                move_ball_xy(ball, paddle1->x + 1, ball->y);
+                //Flip the ball's direction
+                ball->vx = -ball->vx;
+                
+                float prcnt = collision_dist_prcnt(ball, paddle1);
+                float vxi = (1 - prcnt) * EASY_BALL_V_INC;
+                float vyi = prcnt * EASY_BALL_V_INC;
+                
+                ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
+                ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
+    
+            } else if (ball->x <= paddle1->x){
+                fbeep(550, 20);
+                //Increase score...
+                game->p2_score++;
+                ball->vx = EASY_BALL_VX;
+                ball->vy = EASY_BALL_VY;
+                move_ball_xy(ball, game->width / 2, game->height / 2);
+            }
             
-            ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
-            ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
-
-        } else if (ball->x >= paddle2->x){
-            //Increase score...
-            game->p1_score++;
-            ball->vx = -(EASY_BALL_VX);
-            ball->vy = EASY_BALL_VY;
-            move_ball_xy(ball, game->width / 2, game->height / 2);
-        }
-        
-        //We need to erase it now because???
-        erase_ball(win, ball);
-
-        if ((ball->y > game->height) || (ball->y < 0)) ball->vy = -ball->vy;
-        
-        /*current_t = clock() / (CLOCKS_PER_SEC / 1000);
-        if ((current_t - previous_t) > 1) {
-            previous_t = current_t;
+            //Ball has collided with paddle2
+            if ((ball->x >= paddle2->x) && ball_intersect_paddle(ball, paddle2)){
+                fbeep(660, 10);
+                //Move the ball 1 back from the paddle, this paddle is the one on right...
+                move_ball_xy(ball, paddle2->x - 1, ball->y);
+                ball->vx = -ball->vx;
+                
+                float prcnt = collision_dist_prcnt(ball, paddle2);
+                float vxi = (1 - prcnt) * EASY_BALL_V_INC;
+                float vyi = prcnt * EASY_BALL_V_INC;
+                
+                ball->vx = sign(ball->vx) * (fabsf(ball->vx) + vxi);
+                ball->vy = sign(ball->vy) * (fabsf(ball->vy) + vyi);
+    
+            } else if (ball->x >= paddle2->x){
+                //make bad noise :(
+                fbeep(550, 20);
+                //Increase score...
+                game->p1_score++;
+                ball->vx = -(EASY_BALL_VX);
+                ball->vy = EASY_BALL_VY;
+                move_ball_xy(ball, game->width / 2, game->height / 2);
+            }
+            
+            //We need to erase it now because???
+            erase_ball(win, ball);
+    
+            if ((ball->y > game->height) || (ball->y < 0)) ball->vy = -ball->vy;
             move_ball(ball);
-        }*/
+        }
         
-        move_ball(ball);
         
         erase_draw_ball(win, ball, RED);
         erase_draw_paddle(win, paddle1, BLUE);
@@ -678,7 +696,7 @@ int main(int argc, char** argv)
         wrefresh(win);
         refresh();
         
-        usleep(tick_time*1000);
+        //usleep(tick_time*1000);
     }
     
     die();

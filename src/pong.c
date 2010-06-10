@@ -272,6 +272,8 @@ void move_paddle_xy(struct Paddle* paddle, int x, int y)
  GAME STRUCTURE
  ++++++++++++++*/
 struct Game {
+    int max_width;
+    int max_height;
     int width;
     int height;
     int difficulty;
@@ -282,12 +284,14 @@ struct Game {
 };
 
 
-struct Game* make_game(int width, int height, int difficulty, char* p1_name, char* p2_name)
+struct Game* make_game(int max_width, int max_height, int difficulty, char* p1_name, char* p2_name)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
-    p->width = width;
-    p->height = height;
+    p->max_width = max_width;
+    p->max_height = max_height;
+    p->width = max_width;
+    p->height = max_height - INFO_WIN_HEIGHT - 1;
     p->difficulty = difficulty;
     p->p1_score = 0;
     p->p2_score = 0;
@@ -457,7 +461,7 @@ void erase_draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
 int play_game(struct Game* game, int ai)
 {
     WINDOW* win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
-    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, 80, 0, 0);
+    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, game->max_width, 0, 0);
     
     
     Timer* timer = sgl_timer_new();
@@ -596,7 +600,7 @@ int play_game(struct Game* game, int ai)
         snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p1_name, game->p1_score);
         mvwaddstr(info_win, 1, 1, tmp_str);
         snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p2_name, game->p2_score);
-        mvwaddstr(info_win, 1, 80 - strlen(tmp_str) - 1, tmp_str);
+        mvwaddstr(info_win, 1, game->width - strlen(tmp_str) - 1, tmp_str);
         
         wrefresh(info_win);
         wrefresh(win);
@@ -612,7 +616,7 @@ int main(int argc, char** argv)
     (void) argc;
     (void) argv;
 
-    initscr();
+    WINDOW* screen = initscr();
     initialize_colors();
     cbreak();
     keypad(stdscr, TRUE);
@@ -625,14 +629,17 @@ int main(int argc, char** argv)
     struct Menu* main_menu = new_menu(20, 4, 2, choices, GREEN_ON_BLACK, YELLOW_ON_BLACK);
     struct Game* game;
     int ai;
+
+    int max_x, max_y;
+    getmaxyx(screen, max_y, max_x);
     
     switch (poll_menu(main_menu)){
         case 0:
-            game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, EASY, "Computer", "Human");
+            game = make_game(max_x, max_y, EASY, "Computer", "Human");
             ai = 1;
             break;
         case 1:
-            game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, EASY, "Gerald", "Joey");
+            game = make_game(max_x, max_y, EASY, "Gerald", "Joey");
             ai = 0;
             break;
     }

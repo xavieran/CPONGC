@@ -65,6 +65,7 @@ struct Menu* new_menu(int startx, int starty, int num_items, char** items, int I
     menu->selected = 0;
     menu->ITEM_COLOR = ITEM_COLOR;
     menu->SEL_ITEM_COLOR = SEL_ITEM_COLOR;
+    
     return menu;
 }
 

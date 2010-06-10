@@ -18,14 +18,6 @@
 //      MA 02110-1301, USA.
 
 
-#include <ncurses.h>
-
-#include <stdlib.h>
-#include <ncurses.h>
-#include <string.h>
-#include <unistd.h>
-
-
 struct Menu {
     WINDOW* win;
     int selected;

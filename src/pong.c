@@ -33,7 +33,7 @@
 
 #include "sound.h"
 #include "timer.h"
-//#include "fancymenu.h"
+#include "fancymenu.h"
 
 
 #define MAX_STRING_LENGTH 256
@@ -52,7 +52,11 @@
 
 #define INFO_WIN_HEIGHT 3
 
-
+enum difficulties {
+    EASY,
+    MEDIUM,
+    HARD
+};
 
 enum directions {
    UP,
@@ -264,90 +268,13 @@ void move_paddle_xy(struct Paddle* paddle, int x, int y)
 }
 
 
-/*+++++++++++++++++++
- * PARTICLE STRUCTURE
- +++++++++++++++++++*/
-
-struct Particle {
-    int x; int y;
-    int px; int py;
-    int vx; int vy;
-    int gravity;
-    int life;
-    int lifetime;
-    int color;
-};
-
-struct Particle* make_particle(int x, int y, int vx, int vy, int color)
-{
-    struct Particle* p = malloc(sizeof(struct Particle));
-    if (p == NULL) die_no_memory();
-    p->x = x; p->y = y;
-    p->px = x; p->py = y;
-    p->vx = vx; p->vy = vy;
-    p->gravity = randint(GRAVITY_MAX);
-    p->life = 0;
-    p->lifetime = randint(LIFETIME_MAX);
-    p->color = color;
-    return p;
-}
-
-void destroy_particle(struct Particle* particle)
-{             
-    free(particle);
-    particle = NULL;
-}
-
-/*char* str_particle(struct Particle* particle)
-{
-   char* msg = malloc(sizeof(char)*256);
-   sprintf(msg, "(x,y):(%d,%d)   (px,py):(%d,%d)   width:%d   vel:%d",
-         particle->x, particle->y, particle->px, particle->py,
-         particle->vel);
-   return msg;
-}*/
-
-/*struct Particle move_particle_f(struct Particle particle)
-{
-    particle.px = particle.x;
-    particle.py = particle.y;
-    particle.x += particle.vx;
-    particle.y += particle.vy;
-    return particle;
-}
-
-void move_particle(struct Particle* particle)
-{
-    *particle = move_particle_f(*particle);
-}
-
-struct Particle** move_particles_array(struct Particle** particles)
-{
-    int length = sizeof(particles)/sizeof(struct Particle*);
-    int i;
-    struct Particle** live_particles = malloc(sizeof(struct Particle*) * length);
-    int live_length = 0;
-
-    for (i=0; i < length; i++){
-        if !(particles[i]->life > particles[i]->lifetime){
-            live_particles[live_length] = particles[i];
-            live_length++;
-        }
-    }
-
-    for (i=0; i < live_length; i++){
-        live_particles[i] = move_particle(live_particles[i]);
-    }
-    return live_particles;
-}*/
-
-
 /*++++++++++++++
  GAME STRUCTURE
  ++++++++++++++*/
 struct Game {
     int width;
     int height;
+    int difficulty;
     int p1_score;
     int p2_score;
     char* p1_name;
@@ -355,12 +282,13 @@ struct Game {
 };
 
 
-struct Game* make_game(int width, int height, char* p1_name, char* p2_name)
+struct Game* make_game(int width, int height, int difficulty, char* p1_name, char* p2_name)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
     p->width = width;
     p->height = height;
+    p->difficulty = difficulty;
     p->p1_score = 0;
     p->p2_score = 0;
     p->p1_name = p1_name;
@@ -471,6 +399,9 @@ int die()
     return 0;
 }
 
+
+//Some drawing functions:
+
 void erase_rect(WINDOW* win, int y, int x, int length, int height)
 {
     int i;
@@ -481,8 +412,6 @@ void erase_rect(WINDOW* win, int y, int x, int length, int height)
         }
     }
 }
-
-
 
 void erase_ball(WINDOW* win, struct Ball* ball)
 {
@@ -524,49 +453,30 @@ void erase_draw_paddle(WINDOW* win, struct Paddle* paddle, int color)
     draw_paddle(win, paddle, color);
 }                     
 
-void game(int difficulty, int ai);//...
-
-
-
-int main(int argc, char** argv)
+//For now, we will just use random values for the paddle widths and lengths...
+int play_game(struct Game* game, int ai)
 {
-    //Eliminate compiler warning :)
-    (void) argc;
-    (void) argv;
-
-    clock_t previous_t = clock() / (CLOCKS_PER_SEC / 1000);
-    clock_t current_t;
+    WINDOW* win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
+    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, 80, 0, 0);
+    
+    
     Timer* timer = sgl_timer_new();
     
-    struct Game* game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, "Computer", "Human");
     struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
     struct Paddle* paddle1 = make_paddle(0, game->height/2, 5, 3);
     struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 5, 3);
-
-    WINDOW* win = malloc(sizeof(WINDOW));
-    initscr();
     
-    win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
+    //Used for checking where paddles are going to be...
+    struct Paddle check_pad;
     
-    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, 80, 0, 0);
-    
-    initialize_colors();
-    
-    cbreak();
-    keypad(stdscr, TRUE);
-    noecho();
-    curs_set(0); //turn cursor off
-    nodelay(stdscr, 1);
-
-    //int tick_time = 10;
     int ai_wait = 0;
     
     int key;
-    struct Paddle check_pad;
+    
     char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
 
     
-    while ((key = getch())){// != KEY_RIGHT){
+    while ((key = getch())){
 
         switch (key) {
             case 'w':
@@ -603,7 +513,7 @@ int main(int argc, char** argv)
         }
 
         //AI!!!
-        if (ai_wait > EASY_AI_WAIT && ball->vx < 0){
+        if (ai_wait > EASY_AI_WAIT && ball->vx < 0 && ai){
             switch (ball_in_paddle(ball, paddle1)) {
                 case 0:
                     break;
@@ -618,11 +528,7 @@ int main(int argc, char** argv)
         }
         
         //Ball has collided with paddle1
-
-        
-        //current_t = clock() / (CLOCKS_PER_SEC / 1000);
-        if (sgl_timer_elapsed_milliseconds(timer) > 10){//((current_t - previous_t) > 1) {
-            //previous_t = current_t;
+        if (sgl_timer_elapsed_milliseconds(timer) > 10){
             sgl_timer_reset(timer);
             ai_wait++;
             
@@ -695,9 +601,43 @@ int main(int argc, char** argv)
         wrefresh(info_win);
         wrefresh(win);
         refresh();
-        
-        //usleep(tick_time*1000);
     }
+    
+    return 0;
+}
+    
+int main(int argc, char** argv)
+{
+    //Eliminate compiler warning :)
+    (void) argc;
+    (void) argv;
+
+    initscr();
+    initialize_colors();
+    cbreak();
+    keypad(stdscr, TRUE);
+    noecho();
+    curs_set(0); //turn cursor off
+    nodelay(stdscr, 1);
+
+    
+    char* choices[2] = {"AI", "No AI"};
+    struct Menu* main_menu = new_menu(20, 4, 2, choices, GREEN_ON_BLACK, YELLOW_ON_BLACK);
+    struct Game* game;
+    int ai;
+    
+    switch (poll_menu(main_menu)){
+        case 0:
+            game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, EASY, "Computer", "Human");
+            ai = 1;
+            break;
+        case 1:
+            game = make_game(80, 24 - INFO_WIN_HEIGHT + 1, EASY, "Gerald", "Joey");
+            ai = 0;
+            break;
+    }
+        
+    play_game(game, ai);
     
     die();
     return 0;

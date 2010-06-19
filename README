@@ -1,7 +1,6 @@
 Simple pong clone written in C and NCurses
 
-compile it with ./compile_game.sh pong.c pong
-and then play it with ./pong
+Execute the command make, then play the game with ./pong
 
 UP and DOWN arrows to control the Green paddle...
 

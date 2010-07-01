@@ -77,19 +77,39 @@ enum SPECIALS {
 };
 
 enum colors {
-        BLACK,
-        RED,
-        GREEN,
-        YELLOW,
-        BLUE,
-        MAGENTA,
-        CYAN,
-        WHITE,
-        BLUE_ON_BLACK,
-        RED_ON_BLACK,
-        YELLOW_ON_BLACK,
-        GREEN_ON_BLACK
-        };
+    BLACK,
+    RED,
+    GREEN,
+    YELLOW,
+    BLUE,
+    MAGENTA,
+    CYAN,
+    WHITE,
+    BLUE_ON_BLACK,
+    RED_ON_BLACK,
+    YELLOW_ON_BLACK,
+    GREEN_ON_BLACK
+};
+
+//Needed to backslash escape the backslashes...
+char* game_title[6] = {\
+"    ____                    ",\
+"   / __ \\____  ____  ____ _ ",\
+"  / /_/ / __ \\/ __ \\/ __ `/ ",\
+" / ____/ /_/ / / / / /_/ /  ",\
+"/_/    \\____/_/ /_/\\__, /   ",\
+"                  /____/    "};
+
+char* options_title[6] = {\
+"   ____        __  _                 ",\
+"  / __ \\____  / /_(_)___  ____  _____",\
+" / / / / __ \\/ __/ / __ \\/ __ \\/ ___/",\
+"/ /_/ / /_/ / /_/ / /_/ / / / (__  ) ",\
+"\\____/ .___/\\__/_/\\____/_/ /_/____/  ",\
+"    /_/                              "};
+
+const int ai_names_c = 4;
+char* ai_names[4] = {"Slartibartfast", "Emperor Shaddam IV", "Gordon", "Locklear"};
 
 
 void die_no_memory(){
@@ -386,7 +406,26 @@ float collision_dist_prcnt(struct Ball* ball, struct Paddle* paddle)
     return prcnt;
 }
 
+//Basically, move the ball and paddle around a bit...
+//For a background...
+void update_background(struct Ball* ball, struct Paddle* paddle, int max_x, int max_y)
+{
+    move_ball(ball);
+    if ((ball->y > max_y) || (ball->y < 0)) ball->vy = -ball->vy;
+    if ((ball->x > max_x) || (ball->x < 0)) ball->vx = -ball->vx;
 
+    //Move paddle towards ball
+    switch (ball_in_paddle(ball, paddle)) {
+        case 0:
+            break;
+        case 1:
+            if (ball->vx < 0) move_paddle_dir(paddle , UP);
+            break;
+        case -1:
+            if (ball->vx < 0) move_paddle_dir(paddle, DOWN);
+            break;
+        }
+}
 // Drawing Functions:
 void initialize_colors()
 {
@@ -474,8 +513,18 @@ void draw_strings(WINDOW* win, int y, int x, char** str_arr, int arr_c)
     }
 }
 
+void draw_background(WINDOW* win, struct Ball* ball, struct Paddle* paddle)
+{
+    erase_draw_ball(win, ball, RED);
+    erase_draw_paddle(win, paddle, BLUE);
+}
+
+/* PLAY THE GAME!!!*/
 int play_game(struct Game* game, int ai)
 {
+    clear();
+    refresh();
+
     WINDOW* win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
     WINDOW* info_win = newwin(INFO_WIN_HEIGHT, game->max_width, 0, 0);
 
@@ -629,10 +678,19 @@ int play_game(struct Game* game, int ai)
     return 0;
 }
 
-struct Game* change_resolution(WINDOW* win, struct Game* game, int max_xres, int max_yres)
+
+/*MASSIVE BUNCH OF MENU AND GUI STUFF FOLLOWS*/
+
+
+struct Game* change_resolution(WINDOW* win, struct Game* game)
 {
-    int max_x, max_y;
-    getmaxyx(win, max_y, max_x);
+    clear();
+    refresh();
+
+    WINDOW* demo_win = newwin(game->height, game->width, 0, 0);
+
+    int max_xres, max_yres;
+    getmaxyx(win, max_yres, max_xres);
 
     max_yres -= INFO_WIN_HEIGHT;
 
@@ -641,50 +699,75 @@ struct Game* change_resolution(WINDOW* win, struct Game* game, int max_xres, int
 
     int selected = 0;
 
+    Timer* timer = sgl_timer_new();
+
     int c;
     while ((c = getch()) != 'q')
     {
         switch (c){
             case KEY_RIGHT:
-                if (selected){
-                    game->height += 5;
-                    if (game->height > max_yres) game->height = max_yres;
-                } else {
+                if (selected == 0){
                     game->width += 5;
                     if (game->width > max_xres) game->width = max_xres;
+                } else if (selected == 1){
+                    game->height += 5;
+                    if (game->height > max_yres) game->height = max_yres;
+                } else if (selected == 2){
+                    return game;
                 }
+
+                demo_win = newwin(game->height, game->width, 0, 0);
+                clear();
+                refresh();
                 break;
+
             case KEY_LEFT:
-                if (selected){
-                    game->height -= 5;
-                    if (game->height < LOWEST_YRES) game->height = LOWEST_YRES;
-                } else {
+                if (selected == 0){
                     game->width -= 5;
                     if (game->width < LOWEST_XRES) game->width = LOWEST_XRES;
+                } else if (selected == 1){
+                    game->height -= 5;
+                    if (game->height < LOWEST_YRES) game->height = LOWEST_YRES;
                 }
+
+                demo_win = newwin(game->height, game->width, 0, 0);
+                clear();
+                refresh();
                 break;
+
             case KEY_UP:
-                if (selected) selected = 0;
-                else selected = 1;
+                if (selected == 0) selected = 2;
+                else selected -= 1;
                 break;
+
             case KEY_DOWN:
-                if (selected) selected = 0;
-                else selected = 1;
+                if (selected == 2) selected = 0;
+                else selected += 1;
                 break;
             }
 
         snprintf(width_str, MAX_STRING_LENGTH, "Width: < %d >", game->width);
         snprintf(height_str, MAX_STRING_LENGTH, "Height: < %d >", game->height);
 
+        wattron(win, COLOR_PAIR(BLUE_ON_BLACK));
+        mvwaddstr(win, 1, 1, width_str);
+        mvwaddstr(win, 2, 1, height_str);
+        mvwaddstr(win, 3, 1, "Back");
+        wattroff(win, COLOR_PAIR(BLUE_ON_BLACK));
+
         wattron(win, COLOR_PAIR(GREEN_ON_BLACK));
-        if (selected) mvwaddstr(win, max_y / 4 + 1, max_x / 4, height_str);
-        else mvwaddstr(win, max_y / 4, max_x / 4, width_str);
+        if (selected == 0) mvwaddstr(win, 1, 1, width_str);
+        else if (selected == 1) mvwaddstr(win, 2, 1, height_str);
+        else if (selected == 2) mvwaddstr(win, 3, 1, "Back");
         wattroff(win, COLOR_PAIR(GREEN_ON_BLACK));
 
-        if (selected) mvwaddstr(win, max_y / 4, max_x / 4, width_str);
-        else mvwaddstr(win, max_y / 4 + 1, max_x / 4, height_str);
 
-        erase_rect(win, max_y / 4, max_x, strlen(width_str), 2);
+        if (sgl_timer_elapsed_milliseconds(timer) > 20){
+            sgl_timer_reset(timer);
+            erase_rect(win, 1, 1, strlen(width_str), 2);
+            box(demo_win, 0, 0);
+            wrefresh(demo_win);
+        }
     }
 
     game->max_height = game->height;
@@ -693,13 +776,60 @@ struct Game* change_resolution(WINDOW* win, struct Game* game, int max_xres, int
 }
 
 
-char* game_title[6] = {"    ____                    ",\
-                       "   / __ \\____  ____  ____ _ ",\
-                       "  / /_/ / __ \\/ __ \\/ __ `/ ",\
-                       " / ____/ /_/ / / / / /_/ /  ",\
-                       "/_/    \\____/_/ /_/\\__, /   ",\
-                       "                  /____/    "};
 
+struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, struct Paddle* paddle, int max_x, int max_y)
+{
+    clear();
+    refresh();
+
+    char* opts_menu_l[4] = {"Difficulty", "Sound?", "Change Resolution", "Back"};
+    struct Menu* opts_menu = new_menu(max_x / 8, 8, 4, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
+
+    Timer* timer = sgl_timer_new();
+
+    int key;
+
+    while (key != 'q'){
+        switch (key = getch()){
+            case KEY_DOWN:
+                move_selected(opts_menu, DOWN);
+                break;
+            case KEY_UP:
+                move_selected(opts_menu, UP);
+                break;
+
+            case KEY_RIGHT:
+                switch (opts_menu->selected){
+                    case 0: //Difficulty
+                        break;
+                    case 1: //Sound
+                        break;
+                    case 2: //Change Resolution
+                        change_resolution(screen, game);
+                        clear();
+                        refresh();
+                        break;
+                    case 3: //Back
+                        return game;
+                        break;
+                }
+                break;
+        }
+
+        //Move and bound ball
+        if (sgl_timer_elapsed_milliseconds(timer) > 20){
+            sgl_timer_reset(timer);
+            update_background(ball, paddle, max_x, max_y);
+            draw_background(screen, ball, paddle);
+        }
+
+        draw_strings(screen, 1, max_x / 2 - strlen(options_title[0]), options_title, 6);
+
+        draw_menu(opts_menu);
+        wrefresh(opts_menu->win);
+    }
+    return game;
+}
 
 int main_menu(void)
 {
@@ -711,26 +841,28 @@ int main_menu(void)
     curs_set(0); //turn cursor off
     nodelay(stdscr, 1);
 
+
     int max_x, max_y;
     getmaxyx(screen, max_y, max_x);
-
-    int key;
-    int difficulty = EASY;
 
     char* title_menu_l[4] = {"Play!", "Options", "Help", "Quit"};
     struct Menu* title_menu = new_menu(max_x / 8, 8, 4, title_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
 
-    char* opts_menu_l[3] = {"Difficulty", "Sound?", "Change Resolution"};
-    struct Menu* opts_menu = new_menu(max_x / 8, 8, 3, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
-
+    //For the moving background...
     struct Ball* ball = make_ball(max_x / 2, max_y / 4, HARD_BALL_VX, HARD_BALL_VY);
     struct Paddle* paddle = make_paddle(0, max_y / 2, 5, 2);
 
-    //REMOVE THIS
-    struct Game* game = make_game(max_x, max_y, EASY, SOUND_ON, "Computer", "Human");
-
     Timer* timer = sgl_timer_new();
 
+    //Default settings...
+    int difficulty = EASY;
+    int sound = SOUND_OFF;
+
+    //REMOVE THIS
+    char* random_name = ai_names[randint(ai_names_c)];
+    struct Game* game = make_game(max_x, max_y, EASY, sound, random_name, getenv("USER"));
+
+    int key;
     while (key != 'q'){
         switch (key = getch()){
             case KEY_DOWN:
@@ -739,49 +871,35 @@ int main_menu(void)
             case KEY_UP:
                 move_selected(title_menu, UP);
                 break;
+
             case KEY_RIGHT:
                 switch (title_menu->selected){
                     case 0: //Play game
                         play_game(game, 1);
                         break;
                     case 1: //Options
+                        game = options_menu(screen, game, ball, paddle, max_x, max_y);
+                        clear();
                         break;
                     case 2: //Help
                         break;
                     case 3: //Quit
                         return 0;
                         break;
-                    }
+                }
                 break;
         }
 
         //Move and bound ball
         if (sgl_timer_elapsed_milliseconds(timer) > 20){
             sgl_timer_reset(timer);
-            move_ball(ball);
-            if ((ball->y > max_y) || (ball->y < 0)) ball->vy = -ball->vy;
-            if ((ball->x > max_x) || (ball->x < 0)) ball->vx = -ball->vx;
-            erase_draw_ball(screen, ball, RED);
-
-            //Move paddle
-            switch (ball_in_paddle(ball, paddle)) {
-                case 0:
-                    break;
-                case 1:
-                    if (ball->vx < 0) move_paddle_dir(paddle , UP);
-                    break;
-                case -1:
-                    if (ball->vx < 0) move_paddle_dir(paddle, DOWN);
-                    break;
-            }
-
-            erase_draw_paddle(screen, paddle, BLUE);
+            update_background(ball, paddle, max_x, max_y);
+            draw_background(screen, ball, paddle);
+            refresh();
         }
 
-
-
-
         draw_strings(screen, 1, max_x / 2 - strlen(game_title[0]), game_title, 6);
+
         draw_menu(title_menu);
         wrefresh(title_menu->win);
     }

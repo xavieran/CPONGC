@@ -50,7 +50,10 @@
 //Amount ball velocity increases per hit
 #define EASY_BALL_V_INC .05
 
-#define EASY_AI_WAIT 20
+//The ai get's to make decisions every 'x' milliseconds
+#define EASY_AI_WAIT 10
+#define MEDIUM_AI_WAIT 7
+#define HARD_AI_WAIT 5
 
 #define INFO_WIN_HEIGHT 3
 #define LOWEST_XRES 40
@@ -58,6 +61,9 @@
 
 #define SOUND_ON 0
 #define SOUND_OFF 1
+
+#define PADDLE_SENSITIVITY 2
+
 
 enum difficulties {
     EASY,
@@ -131,12 +137,6 @@ int sign(float x)
     if (x < 0) return -1;
     if (x == 0) return 0;
     return 1;
-}
-
-float abs_float(float x)
-{
-    if (x < 0) return -1.0 * x;
-    return x;
 }
 
 int my_int(float x)
@@ -305,6 +305,7 @@ struct Game {
     int height;
     int difficulty;
     int sound;
+    int sensitivity;
     int p1_score;
     int p2_score;
     char* p1_name;
@@ -312,7 +313,7 @@ struct Game {
 };
 
 
-struct Game* make_game(int max_width, int max_height, int difficulty, int sound, char* p1_name, char* p2_name)
+struct Game* make_game(int max_width, int max_height, int difficulty, int sound, int sensitivity, char* p1_name, char* p2_name)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
@@ -322,6 +323,7 @@ struct Game* make_game(int max_width, int max_height, int difficulty, int sound,
     p->height = max_height - INFO_WIN_HEIGHT - 1;
     p->difficulty = difficulty;
     p->sound = sound;
+    p->sensitivity = sensitivity;
     p->p1_score = 0;
     p->p2_score = 0;
     p->p1_name = p1_name;
@@ -375,8 +377,9 @@ int lines_intersect(float p0_x, float p0_y, float p1_x, float p1_y,
 
 int ball_intersect_paddle(struct Ball* ball, struct Paddle* paddle)
 {
-    if (lines_intersect(ball->x, ball->y, ball->px, ball->py, paddle->x,
-                        paddle->y + paddle->width, paddle->x, paddle->y)){
+    if (lines_intersect(ball->x, ball->y, ball->px, ball->py,
+                        paddle->x, paddle->y + paddle->width + 1, //Add one so that we hit the actual bottom of the paddle
+                        paddle->x, paddle->y)){
         return 1;
     }
     return 0;
@@ -411,7 +414,7 @@ float collision_dist_prcnt(struct Ball* ball, struct Paddle* paddle)
 void update_background(struct Ball* ball, struct Paddle* paddle, int max_x, int max_y)
 {
     move_ball(ball);
-    if ((ball->y > max_y) || (ball->y < 0)) ball->vy = -ball->vy;
+    if (((ball->y + 1) > max_y) || (ball->y < 0)) ball->vy = -ball->vy;
     if ((ball->x > max_x) || (ball->x < 0)) ball->vx = -ball->vx;
 
     //Move paddle towards ball
@@ -519,21 +522,28 @@ void draw_background(WINDOW* win, struct Ball* ball, struct Paddle* paddle)
     erase_draw_paddle(win, paddle, BLUE);
 }
 
+/* +++++++++++++++ */
 /* PLAY THE GAME!!!*/
+/* --------------- */
+
+
 int play_game(struct Game* game, int ai)
 {
     clear();
     refresh();
 
     WINDOW* win = newwin(game->height, game->width, INFO_WIN_HEIGHT, 0);
-    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, game->max_width, 0, 0);
+    WINDOW* info_win = newwin(INFO_WIN_HEIGHT, game->width, 0, 0);
 
 
     Timer* timer = sgl_timer_new();
 
-    struct Ball* ball = make_ball(game->width/2, game->height/2, EASY_BALL_VX, EASY_BALL_VY);
-    struct Paddle* paddle1 = make_paddle(0, game->height/2, 5, 3);
-    struct Paddle* paddle2 = make_paddle(game->width-1, game->height/2, 5, 3);
+    //int ball_vx = EASY_BALL_VX;
+    //int ball_vy = EASY_BALL_VY;
+    //FIX THIS ^^^
+    struct Ball* ball = make_ball(game->width/2, game->height/2, .2, .075);
+    struct Paddle* paddle1 = make_paddle(1, game->height/2, 5, game->sensitivity);
+    struct Paddle* paddle2 = make_paddle(game->width-2, game->height/2, 5, game->sensitivity);
 
     //Used for checking where paddles are going to be...
     struct Paddle check_pad;
@@ -654,7 +664,7 @@ int play_game(struct Game* game, int ai)
             //We need to erase it now because???
             erase_ball(win, ball);
 
-            if ((ball->y > game->height) || (ball->y < 0)) ball->vy = -ball->vy;
+            if ((ball->y + 1 > game->height - 1) || (ball->y < 1)) ball->vy = -ball->vy;
             move_ball(ball);
         }
 
@@ -665,6 +675,7 @@ int play_game(struct Game* game, int ai)
 
         //Display some info
         box(info_win, 0 , 0);
+        box(win, 0, 0);
         snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p1_name, game->p1_score);
         mvwaddstr(info_win, 1, 1, tmp_str);
         snprintf(tmp_str, MAX_STRING_LENGTH, "%s: %d", game->p2_name, game->p2_score);
@@ -692,7 +703,7 @@ struct Game* change_resolution(WINDOW* win, struct Game* game)
     int max_xres, max_yres;
     getmaxyx(win, max_yres, max_xres);
 
-    max_yres -= INFO_WIN_HEIGHT;
+    max_yres -= INFO_WIN_HEIGHT + 1;//Why minus 1?
 
     char* width_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
     char* height_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
@@ -782,10 +793,16 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
     clear();
     refresh();
 
-    char* opts_menu_l[4] = {"Difficulty", "Sound?", "Change Resolution", "Back"};
-    struct Menu* opts_menu = new_menu(max_x / 8, 8, 4, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
+    move_ball_xy(ball, ball->x, max_y / 2);
+
+    char* opts_menu_l[5] = {"Difficulty", "Sound", "Paddle Sensitivity", "Screen Size", "Back"};
+    struct Menu* opts_menu = new_menu(max_x / 8, 8, 5, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
+
+    WINDOW* info_win = newwin(3, max_x, max_y - 3, 0);
 
     Timer* timer = sgl_timer_new();
+
+    char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
 
     int key;
 
@@ -793,23 +810,31 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
         switch (key = getch()){
             case KEY_DOWN:
                 move_selected(opts_menu, DOWN);
+                wclear(info_win);
                 break;
             case KEY_UP:
+                wclear(info_win);
                 move_selected(opts_menu, UP);
                 break;
-
             case KEY_RIGHT:
+            case KEY_ENTER:
                 switch (opts_menu->selected){
                     case 0: //Difficulty
+                        if (game->difficulty == 2) game->difficulty = 0;
+                        else game->difficulty++;
                         break;
                     case 1: //Sound
+                        if (game->sound) game->sound = 0;
+                        else game->sound = 1;
                         break;
-                    case 2: //Change Resolution
+                    case 2: //Paddle sensitivity
+                        break;
+                    case 3: //Change Resolution
                         change_resolution(screen, game);
                         clear();
                         refresh();
                         break;
-                    case 3: //Back
+                    case 4: //Back
                         return game;
                         break;
                 }
@@ -819,29 +844,44 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
         //Move and bound ball
         if (sgl_timer_elapsed_milliseconds(timer) > 20){
             sgl_timer_reset(timer);
-            update_background(ball, paddle, max_x, max_y);
+            update_background(ball, paddle, max_x, max_y - 4);
             draw_background(screen, ball, paddle);
+            box(info_win, 0, 0);
         }
 
         draw_strings(screen, 1, max_x / 2 - strlen(options_title[0]), options_title, 6);
-
         draw_menu(opts_menu);
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%d", game->difficulty + 1);//+1 so we don't get a difficulty of '0'
+        mvwaddstr(screen, opts_menu->y, opts_menu->x + opts_menu->width + 1, tmp_str);
+        mvwaddstr(screen, opts_menu->y + 1, opts_menu->x + opts_menu->width + 1, game->sound ? "On " : "Off");
+
+        //Write a helpful hint in the info_win
+        switch (opts_menu->selected){
+            case 0:
+                mvwaddstr(info_win, 1, 1, "Change the difficulty, higher numbers are more difficult");
+                break;
+            case 1:
+                mvwaddstr(info_win, 1, 1, "Toggle sound on or off");
+                break;
+            case 2:
+                mvwaddstr(info_win, 1, 1, "Adjust paddle sensitivity, higher numbers are less sensitive");
+                break;
+            case 3:
+                mvwaddstr(info_win, 1, 1, "Change the playing screen size");
+                break;
+            case 4:
+                mvwaddstr(info_win, 1, 1, "Exit to main menu");
+                break;
+        }
+
         wrefresh(opts_menu->win);
+        wrefresh(info_win);
     }
     return game;
 }
 
-int main_menu(void)
+int main_menu(WINDOW* screen)
 {
-    WINDOW* screen = initscr();
-    initialize_colors();
-    cbreak();
-    keypad(stdscr, TRUE);
-    noecho();
-    curs_set(0); //turn cursor off
-    nodelay(stdscr, 1);
-
-
     int max_x, max_y;
     getmaxyx(screen, max_y, max_x);
 
@@ -858,9 +898,8 @@ int main_menu(void)
     int difficulty = EASY;
     int sound = SOUND_OFF;
 
-    //REMOVE THIS
     char* random_name = ai_names[randint(ai_names_c)];
-    struct Game* game = make_game(max_x, max_y, EASY, sound, random_name, getenv("USER"));
+    struct Game* game = make_game(max_x, max_y, difficulty, sound, PADDLE_SENSITIVITY, random_name, getenv("USER"));
 
     int key;
     while (key != 'q'){
@@ -873,6 +912,7 @@ int main_menu(void)
                 break;
 
             case KEY_RIGHT:
+            case KEY_ENTER:
                 switch (title_menu->selected){
                     case 0: //Play game
                         play_game(game, 1);
@@ -890,7 +930,7 @@ int main_menu(void)
                 break;
         }
 
-        //Move and bound ball
+        //Render the background
         if (sgl_timer_elapsed_milliseconds(timer) > 20){
             sgl_timer_reset(timer);
             update_background(ball, paddle, max_x, max_y);
@@ -904,20 +944,27 @@ int main_menu(void)
         wrefresh(title_menu->win);
     }
 
-
-    //
-    //game = change_resolution(screen, game, max_x, max_y);
-
-    //play_game(game, 1);
+    return 0;
 }
 
 int main(int argc, char** argv)
 {
-    //Eliminate compiler warning :)
+    //Eliminate compiler warning, we're not using these arguments yet...
     (void) argc;
     (void) argv;
-    fbeep(1000, 10);
-    main_menu();
+
+    //Set the curses stuff up...
+    WINDOW* screen = initscr();
+    initialize_colors();
+    cbreak();
+    keypad(stdscr, TRUE); //Allow curses to return Arrow keys, pagedown, home, etc.
+    noecho(); //Stop echoing of keypresses
+    curs_set(0); //turn cursor off
+    nodelay(stdscr, 1);
+
+
+    main_menu(screen);
     die();
+    printf("%d", randint(4));
     return 0;
 }

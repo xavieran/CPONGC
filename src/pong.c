@@ -59,8 +59,8 @@
 #define LOWEST_XRES 40
 #define LOWEST_YRES 12
 
-#define SOUND_ON 0
-#define SOUND_OFF 1
+#define SOUND_ON 1
+#define SOUND_OFF 0
 
 #define PADDLE_SENSITIVITY 2
 
@@ -114,8 +114,16 @@ char* options_title[6] = {\
 "\\____/ .___/\\__/_/\\____/_/ /_/____/  ",\
 "    /_/                              "};
 
-const int ai_names_c = 4;
-char* ai_names[4] = {"Slartibartfast", "Emperor Shaddam IV", "Gordon", "Locklear"};
+char* help_title[6] = {" _   _      _          "\
+"| | | | ___| |_ __  "\
+"| |_| |/ _ \\ | '_ \\ "\
+"|  _  |  __/ | |_) |"\
+"|_| |_|\\___|_| .__/ "\
+"             |_|"};
+
+int ai_names_c = 8;
+char* ai_names[8] = {"Slartibartfast", "Emperor Shaddam IV", "Gordon", "Locklear",\
+"Commander Keen", "Cosmo", "xavieran", "Dalek"};
 
 
 void die_no_memory(){
@@ -549,6 +557,12 @@ int play_game(struct Game* game, int ai)
     struct Paddle check_pad;
 
     int ai_wait = 0;
+    int ai_wait_time = 0;
+    switch (game->difficulty){
+        case 1: ai_wait_time = EASY_AI_WAIT; break;
+        case 2: ai_wait_time = MEDIUM_AI_WAIT; break;
+        case 3: ai_wait_time = HARD_AI_WAIT; break;
+    }
 
     int key;
 
@@ -597,7 +611,7 @@ int play_game(struct Game* game, int ai)
         }
 
         //AI!!!
-        if (ai_wait > EASY_AI_WAIT && ball->vx < 0 && ai){
+        if (ai_wait > ai_wait_time && ball->vx < 0 && ai){
             switch (ball_in_paddle(ball, paddle1)) {
                 case 0:
                     break;
@@ -685,7 +699,6 @@ int play_game(struct Game* game, int ai)
         wrefresh(win);
         refresh();
     }
-
     return 0;
 }
 
@@ -787,6 +800,30 @@ struct Game* change_resolution(WINDOW* win, struct Game* game)
 }
 
 
+void help_menu(WINDOW* screen, struct Ball* ball, struct Paddle* paddle, int max_x, int max_y)
+{
+    clear();
+    refresh();
+
+    move_ball_xy(ball, ball->x, max_y / 2);
+
+    Timer* timer = sgl_timer_new();
+
+    int key;
+
+    while (key != 'q'){
+
+        //Move and bound ball
+        if (sgl_timer_elapsed_milliseconds(timer) > 20){
+            sgl_timer_reset(timer);
+            update_background(ball, paddle, max_x, max_y - 4);
+            draw_background(screen, ball, paddle);
+        }
+
+        draw_strings(screen, 1, max_x / 2 - strlen(help_title[0]), help_title, 6);
+    }
+}
+
 
 struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, struct Paddle* paddle, int max_x, int max_y)
 {
@@ -828,6 +865,8 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
                         else game->sound = 1;
                         break;
                     case 2: //Paddle sensitivity
+                        if (game->sensitivity == 4) game->sensitivity = 1;
+                        else game->sensitivity++;
                         break;
                     case 3: //Change Resolution
                         change_resolution(screen, game);
@@ -852,8 +891,15 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
         draw_strings(screen, 1, max_x / 2 - strlen(options_title[0]), options_title, 6);
         draw_menu(opts_menu);
         snprintf(tmp_str, MAX_STRING_LENGTH, "%d", game->difficulty + 1);//+1 so we don't get a difficulty of '0'
-        mvwaddstr(screen, opts_menu->y, opts_menu->x + opts_menu->width + 1, tmp_str);
-        mvwaddstr(screen, opts_menu->y + 1, opts_menu->x + opts_menu->width + 1, game->sound ? "On " : "Off");
+        mvwaddstr(screen, opts_menu->y, opts_menu->x + opts_menu->width + 1, tmp_str);//print difficulty
+
+        mvwaddstr(screen, opts_menu->y + 1, opts_menu->x + opts_menu->width + 1, game->sound ? "On " : "Off");//print sound
+
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%d", game->sensitivity);
+        mvwaddstr(screen, opts_menu->y + 2, opts_menu->x + opts_menu->width + 1, tmp_str);//print sensitivity
+
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%dx%d", game->width, game->height);
+        mvwaddstr(screen, opts_menu->y + 3, opts_menu->x + opts_menu->width + 1, tmp_str);
 
         //Write a helpful hint in the info_win
         switch (opts_menu->selected){
@@ -922,6 +968,7 @@ int main_menu(WINDOW* screen)
                         clear();
                         break;
                     case 2: //Help
+                        help_menu(screen, ball, paddle, max_x, max_y);
                         break;
                     case 3: //Quit
                         return 0;
@@ -949,9 +996,12 @@ int main_menu(WINDOW* screen)
 
 int main(int argc, char** argv)
 {
-    //Eliminate compiler warning, we're not using these arguments yet...
+    //Eliminate compiler warning, we're not using these for now...
     (void) argc;
     (void) argv;
+
+    //Initialize rand seed...
+    srand(time(NULL));
 
     //Set the curses stuff up...
     WINDOW* screen = initscr();

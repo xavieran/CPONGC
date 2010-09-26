@@ -64,6 +64,8 @@
 
 #define PADDLE_SENSITIVITY 2
 
+#define MAX_SCORE 10
+
 
 enum difficulties {
     EASY,
@@ -114,12 +116,21 @@ char* options_title[6] = {\
 "\\____/ .___/\\__/_/\\____/_/ /_/____/  ",\
 "    /_/                              "};
 
-char* help_title[6] = {" _   _      _          "\
-"| | | | ___| |_ __  "\
-"| |_| |/ _ \\ | '_ \\ "\
-"|  _  |  __/ | |_) |"\
-"|_| |_|\\___|_| .__/ "\
-"             |_|"};
+char* help_title[6] = {\
+"    __  __     __    ",\
+"   / / / /__  / /___ ",\
+"  / /_/ / _ \\/ / __ \\",\
+" / __  /  __/ / /_/ /",\
+"/_/ /_/\\___/_/ .___/ ",\
+"            /_/      "};
+
+char* help_text[6] = {\
+"CPONGC is a Curses PONG Clone, designed to help you relive the glory days",\
+"of pong on your linux terminal. The controls are very simple, up arrow to",\
+"go up up, and down arrow to go down. When playing, your goal is to hit   ",\
+"the ball so that your opponent is unable to return it. First to 10 points",\
+"wins. Hit p to pause the game, and m to toggle sound on or off in the    ",\
+"game. Have Fun!"};
 
 int ai_names_c = 8;
 char* ai_names[8] = {"Slartibartfast", "Emperor Shaddam IV", "Gordon", "Locklear",\
@@ -318,10 +329,13 @@ struct Game {
     int p2_score;
     char* p1_name;
     char* p2_name;
+    int max_score;
+    int paused;
 };
 
 
-struct Game* make_game(int max_width, int max_height, int difficulty, int sound, int sensitivity, char* p1_name, char* p2_name)
+struct Game* make_game(int max_width, int max_height, int difficulty, int sound,\
+                       int sensitivity, char* p1_name, char* p2_name, int max_score)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
@@ -336,6 +350,8 @@ struct Game* make_game(int max_width, int max_height, int difficulty, int sound,
     p->p2_score = 0;
     p->p1_name = p1_name;
     p->p2_name = p2_name;
+    p->max_score = max_score;
+    p->paused = 0;
     return p;
 }
 
@@ -565,11 +581,12 @@ int play_game(struct Game* game, int ai)
     }
 
     int key;
+    char* pause_message = "PAUSED";
 
     char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
 
 
-    while ((key = getch())){
+    while ((key = getch()) != 'q'){
 
         switch (key) {
             case 'm':
@@ -577,7 +594,18 @@ int play_game(struct Game* game, int ai)
                 else game->sound = 1;
                 break;
 
+            case 'p':
+                if (game->paused){
+                     game->paused = 0;
+                     erase_rect(win, game->max_height / 3, game->max_width / 2 - strlen(pause_message), strlen(pause_message), 1);
+                } else {
+                    game->paused = 1;
+                    mvwaddstr(win, game->max_height / 3, game->max_width / 2 - strlen(pause_message), pause_message);
+                }
+                break;
+
             case 'w':
+                if (game->paused) break;
                 check_pad = move_paddle_dir_f(*paddle1, UP);
                 if (check_pad.y + paddle1->vel < 0){
                     move_paddle_xy(paddle1, paddle1->x, game->height - paddle1->width);
@@ -586,6 +614,7 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case 's':
+                if (game->paused) break;
                 check_pad = move_paddle_dir_f(*paddle1, UP);
                 if ((paddle1->y + paddle1->vel + paddle1->width)  > game->height){
                     move_paddle_xy(paddle1, paddle1->x, 0);
@@ -594,6 +623,7 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case KEY_UP:
+                if (game->paused) break;
                 check_pad = move_paddle_dir_f(*paddle2, UP);
                 if ((check_pad.y + paddle2->vel) < 0){
                     move_paddle_xy(paddle2, paddle2->x, game->height - paddle2->width);
@@ -602,6 +632,7 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case KEY_DOWN:
+                if (game->paused) break;
                 check_pad = move_paddle_dir_f(*paddle2, DOWN);
                 if (((check_pad.y + check_pad.width) - paddle2->vel)  > game->height){
                     move_paddle_xy(paddle2, paddle2->x, 0);
@@ -626,7 +657,7 @@ int play_game(struct Game* game, int ai)
         }
 
         //Ball has collided with paddle1
-        if (sgl_timer_elapsed_milliseconds(timer) > 10){
+        if ((sgl_timer_elapsed_milliseconds(timer) > 10) && !game->paused){
             sgl_timer_reset(timer);
             ai_wait++;
 
@@ -651,6 +682,11 @@ int play_game(struct Game* game, int ai)
                 ball->vx = EASY_BALL_VX;
                 ball->vy = EASY_BALL_VY;
                 move_ball_xy(ball, game->width / 2, game->height / 2);
+
+                if (game->p2_score > game->max_score){
+                    mvwaddstr(win, game->max_height / 2, game->max_width / 2, "Player 2 Wins!");
+                    //QUIT GAME AND WHATNOT...
+                }
             }
 
             //Ball has collided with paddle2
@@ -675,7 +711,7 @@ int play_game(struct Game* game, int ai)
                 move_ball_xy(ball, game->width / 2, game->height / 2);
             }
 
-            //We need to erase it now because???
+            //We need to erase it _now_ because???
             erase_ball(win, ball);
 
             if ((ball->y + 1 > game->height - 1) || (ball->y < 1)) ball->vy = -ball->vy;
@@ -805,13 +841,13 @@ void help_menu(WINDOW* screen, struct Ball* ball, struct Paddle* paddle, int max
     clear();
     refresh();
 
-    move_ball_xy(ball, ball->x, max_y / 2);
-
     Timer* timer = sgl_timer_new();
+
+    move_ball_xy(ball, ball->x, max_y / 2);
 
     int key;
 
-    while (key != 'q'){
+    while ((key = getch()) != 'q'){
 
         //Move and bound ball
         if (sgl_timer_elapsed_milliseconds(timer) > 20){
@@ -821,7 +857,11 @@ void help_menu(WINDOW* screen, struct Ball* ball, struct Paddle* paddle, int max
         }
 
         draw_strings(screen, 1, max_x / 2 - strlen(help_title[0]), help_title, 6);
+        draw_strings(screen, 8, 3, help_text, 6);
+
+        wrefresh(screen);
     }
+    clear();
 }
 
 
@@ -945,8 +985,7 @@ int main_menu(WINDOW* screen)
     int sound = SOUND_OFF;
 
     char* random_name = ai_names[randint(ai_names_c)];
-    struct Game* game = make_game(max_x, max_y, difficulty, sound, PADDLE_SENSITIVITY, random_name, getenv("USER"));
-
+    struct Game* game = make_game(max_x, max_y, difficulty, sound, PADDLE_SENSITIVITY, random_name, getenv("USER"), MAX_SCORE);
     int key;
     while (key != 'q'){
         switch (key = getch()){

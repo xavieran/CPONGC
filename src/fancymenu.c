@@ -67,7 +67,7 @@ struct Menu* new_menu(int x, int y, int num_items, char** items, int ITEM_COLOR,
 
     struct Menu* menu = (struct Menu*) malloc(sizeof(struct Menu));
 
-    int width = longest_str(num_items, items)+2;//the 2 is for the '?
+    int width = longest_str(num_items, items)+2;//the 2 is for the > selector...
     int height = num_items;
     menu->win = newwin(height, width, y, x);
     menu->num_items = num_items;

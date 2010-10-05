@@ -64,7 +64,8 @@
 
 #define PADDLE_SENSITIVITY 2
 
-#define MAX_SCORE 10
+#define MAX_SCORE 50
+#define DEFAULT_SCORE 10
 
 
 enum difficulties {
@@ -325,6 +326,8 @@ struct Game {
     int difficulty;
     int sound;
     int sensitivity;
+    int p1_aictrl; //0 for Human, 1 for AI
+    int p2_aictrl; //As above
     int p1_score;
     int p2_score;
     char* p1_name;
@@ -335,7 +338,8 @@ struct Game {
 
 
 struct Game* make_game(int max_width, int max_height, int difficulty, int sound,\
-                       int sensitivity, char* p1_name, char* p2_name, int max_score)
+                       int sensitivity, char* p1_name, char* p2_name,\
+                       int p1_aictrl, int p2_aictrl, int max_score)
 {
     struct Game* p = malloc(sizeof(struct Game));
     if (p == NULL) die_no_memory();
@@ -346,6 +350,8 @@ struct Game* make_game(int max_width, int max_height, int difficulty, int sound,
     p->difficulty = difficulty;
     p->sound = sound;
     p->sensitivity = sensitivity;
+    p->p1_aictrl = p1_aictrl;
+    p->p2_aictrl = p2_aictrl;
     p->p1_score = 0;
     p->p2_score = 0;
     p->p1_name = p1_name;
@@ -551,7 +557,7 @@ void draw_background(WINDOW* win, struct Ball* ball, struct Paddle* paddle)
 /* --------------- */
 
 
-int play_game(struct Game* game, int ai)
+int play_game(struct Game* game)
 {
     clear();
     refresh();
@@ -581,14 +587,16 @@ int play_game(struct Game* game, int ai)
     }
 
     int key;
+    int game_won = 0;
     char* pause_message = "PAUSED";
-
+    //Use this for any printing, etc.
     char* tmp_str = malloc(sizeof(char) * MAX_STRING_LENGTH);
 
 
     while ((key = getch()) != 'q'){
 
         switch (key) {
+            case ERR:break;//Ignore this key...
             case 'm':
                 if (game->sound) game->sound = 0;
                 else game->sound = 1;
@@ -605,7 +613,8 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case 'w':
-                if (game->paused) break;
+                if (game->paused || game_won) break;
+                if (game->p1_aictrl) break;//The AI is controlling this paddle, so don't let player move it...
                 check_pad = move_paddle_dir_f(*paddle1, UP);
                 if (check_pad.y + paddle1->vel < 0){
                     move_paddle_xy(paddle1, paddle1->x, game->height - paddle1->width);
@@ -614,7 +623,8 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case 's':
-                if (game->paused) break;
+                if (game->paused || game_won) break;
+                if (game->p1_aictrl) break;//The AI is controlling this paddle, so don't let player move it...
                 check_pad = move_paddle_dir_f(*paddle1, UP);
                 if ((paddle1->y + paddle1->vel + paddle1->width)  > game->height){
                     move_paddle_xy(paddle1, paddle1->x, 0);
@@ -623,7 +633,8 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case KEY_UP:
-                if (game->paused) break;
+                if (game->paused || game_won) break;
+                if (game->p2_aictrl) break;//The AI is controlling this paddle, so don't let player move it...
                 check_pad = move_paddle_dir_f(*paddle2, UP);
                 if ((check_pad.y + paddle2->vel) < 0){
                     move_paddle_xy(paddle2, paddle2->x, game->height - paddle2->width);
@@ -632,35 +643,57 @@ int play_game(struct Game* game, int ai)
                 break;
 
             case KEY_DOWN:
-                if (game->paused) break;
+                if (game->paused || game_won) break;
+                if (game->p2_aictrl) break;//The AI is controlling this paddle, so don't let player move it...
                 check_pad = move_paddle_dir_f(*paddle2, DOWN);
                 if (((check_pad.y + check_pad.width) - paddle2->vel)  > game->height){
                     move_paddle_xy(paddle2, paddle2->x, 0);
                 }else { move_paddle_dir(paddle2, DOWN);
                 }
                 break;
+            default:
+                if (game_won){
+                    clear();
+                    refresh();
+                    return 0;
+                }
+                break;
         }
 
-        //AI!!!
-        if (ai_wait > ai_wait_time && ball->vx < 0 && ai){
-            switch (ball_in_paddle(ball, paddle1)) {
-                case 0:
-                    break;
-                case 1:
-                    move_paddle_dir(paddle1, UP);
-                    break;
-                case -1:
-                    move_paddle_dir(paddle1, DOWN);
-                    break;
+        //AI Checks whether it has the ball and then moves
+        if (ai_wait > ai_wait_time){
+            if (game->p1_aictrl && ball->vx < 0){
+                switch (ball_in_paddle(ball, paddle1)) {
+                    case 0:
+                        break;
+                    case 1:
+                        move_paddle_dir(paddle1, UP);
+                        break;
+                    case -1:
+                        move_paddle_dir(paddle1, DOWN);
+                        break;
+                }
+            }else if (game->p2_aictrl && ball->vx > 0){
+                switch (ball_in_paddle(ball, paddle2)) {
+                    case 0:
+                        break;
+                    case 1:
+                        move_paddle_dir(paddle2, UP);
+                        break;
+                    case -1:
+                        move_paddle_dir(paddle2, DOWN);
+                        break;
+                }
             }
             ai_wait = 0;
         }
 
-        //Ball has collided with paddle1
-        if ((sgl_timer_elapsed_milliseconds(timer) > 10) && !game->paused){
+
+        if ((sgl_timer_elapsed_milliseconds(timer) > 10) && !(game->paused || game_won)){
             sgl_timer_reset(timer);
             ai_wait++;
 
+            //Ball has collided with paddle1
             if ((ball->x <= paddle1->x) && ball_intersect_paddle(ball, paddle1)){
                 if (game->sound) fbeep(660, 10);
                 //Move the ball 1 forward from paddle, this paddle is on left
@@ -682,11 +715,6 @@ int play_game(struct Game* game, int ai)
                 ball->vx = EASY_BALL_VX;
                 ball->vy = EASY_BALL_VY;
                 move_ball_xy(ball, game->width / 2, game->height / 2);
-
-                if (game->p2_score > game->max_score){
-                    mvwaddstr(win, game->max_height / 2, game->max_width / 2, "Player 2 Wins!");
-                    //QUIT GAME AND WHATNOT...
-                }
             }
 
             //Ball has collided with paddle2
@@ -711,11 +739,22 @@ int play_game(struct Game* game, int ai)
                 move_ball_xy(ball, game->width / 2, game->height / 2);
             }
 
+
             //We need to erase it _now_ because???
             erase_ball(win, ball);
 
             if ((ball->y + 1 > game->height - 1) || (ball->y < 1)) ball->vy = -ball->vy;
             move_ball(ball);
+        }
+
+        if (game->p1_score == game->max_score){
+            game_won = 1;
+            snprintf(tmp_str, MAX_STRING_LENGTH, "%s Wins!", game->p1_name);
+            mvwaddstr(win, game->max_height / 3, game->max_width / 2 - strlen(tmp_str), tmp_str);
+        }else if (game->p2_score == game->max_score){
+            game_won = 1;
+            snprintf(tmp_str, MAX_STRING_LENGTH, "%s Wins!", game->p2_name);
+            mvwaddstr(win, game->max_height / 3, game->max_width / 2 - strlen(tmp_str), tmp_str);
         }
 
 
@@ -735,6 +774,9 @@ int play_game(struct Game* game, int ai)
         wrefresh(win);
         refresh();
     }
+
+    clear();
+    refresh();
     return 0;
 }
 
@@ -762,7 +804,7 @@ struct Game* change_resolution(WINDOW* win, struct Game* game)
     Timer* timer = sgl_timer_new();
 
     int c;
-    while ((c = getch()) != 'q')
+    while ((c = getch()) != KEY_ENTER)
     {
         switch (c){
             case KEY_RIGHT:
@@ -773,6 +815,8 @@ struct Game* change_resolution(WINDOW* win, struct Game* game)
                     game->height += 5;
                     if (game->height > max_yres) game->height = max_yres;
                 } else if (selected == 2){
+                    clear();
+                    refresh();
                     return game;
                 }
 
@@ -832,6 +876,10 @@ struct Game* change_resolution(WINDOW* win, struct Game* game)
 
     game->max_height = game->height;
     game->max_width = game->width;
+
+    clear();
+    refresh();
+
     return game;
 }
 
@@ -872,8 +920,11 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
 
     move_ball_xy(ball, ball->x, max_y / 2);
 
-    char* opts_menu_l[5] = {"Difficulty", "Sound", "Paddle Sensitivity", "Screen Size", "Back"};
-    struct Menu* opts_menu = new_menu(max_x / 8, 8, 5, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
+    char* opts_menu_l[8] = {"Difficulty", "Sound", "Paddle Sensitivity",\
+        "Screen Size", "Left Control", "Right Control",\
+        "Play to", "Save & Return"};
+
+    struct Menu* opts_menu = new_menu(max_x / 8, 8, 8, opts_menu_l, BLUE_ON_BLACK, GREEN_ON_BLACK);
 
     WINDOW* info_win = newwin(3, max_x, max_y - 3, 0);
 
@@ -889,10 +940,37 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
                 move_selected(opts_menu, DOWN);
                 wclear(info_win);
                 break;
+
             case KEY_UP:
                 wclear(info_win);
                 move_selected(opts_menu, UP);
                 break;
+
+            case KEY_LEFT:
+                switch (opts_menu->selected){
+                    case 0: //Difficulty
+                        if (game->difficulty == 0) game->difficulty = 2;
+                        else game->difficulty--;
+                        break;
+                    case 1: //Sound
+                        if (game->sound) game->sound = 0;
+                        else game->sound = 1;
+                        break;
+                    case 2: //Paddle sensitivity
+                        if (game->sensitivity == 1) game->sensitivity = 4;//DEHARDCODE THE 4
+                        else game->sensitivity--;
+                        break;
+                    case 4: //Left control selection...
+                        game->p1_aictrl = (game->p1_aictrl ? 0 : 1); break;
+                    case 5: //Right control selection
+                        game->p2_aictrl = (game->p2_aictrl ? 0 : 1); break;
+                    case 6: //Change maximum score...
+                        game->max_score--;
+                        if (game->max_score < 1) game->max_score = MAX_SCORE;
+                        break;
+                }
+                break;
+
             case KEY_RIGHT:
             case KEY_ENTER:
                 switch (opts_menu->selected){
@@ -910,10 +988,20 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
                         break;
                     case 3: //Change Resolution
                         change_resolution(screen, game);
-                        clear();
-                        refresh();
                         break;
-                    case 4: //Back
+                    case 4: //Left control selection...
+                        if (game->p1_aictrl) game->p1_aictrl = 0;
+                        else game->p1_aictrl = 1;
+                        break;
+                    case 5: //Right control selection
+                        if (game->p2_aictrl) game->p2_aictrl = 0;
+                        else game->p2_aictrl = 1;
+                        break;
+                    case 6: //Change maximum score...
+                        game->max_score++;
+                        if (game->max_score > MAX_SCORE) game->max_score = 1;
+                        break;
+                    case 7: //Quit
                         return game;
                         break;
                 }
@@ -930,39 +1018,55 @@ struct Game* options_menu(WINDOW* screen, struct Game* game, struct Ball* ball, 
 
         draw_strings(screen, 1, max_x / 2 - strlen(options_title[0]), options_title, 6);
         draw_menu(opts_menu);
-        snprintf(tmp_str, MAX_STRING_LENGTH, "%d", game->difficulty + 1);//+1 so we don't get a difficulty of '0'
+
+        /************************************************************
+         * NOTE: The spaces in strings below are there for a purpose!
+         * They erase double digits. eg. "1 " erases "10"
+         */
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%d ", game->difficulty + 1);//+1 so we don't get a difficulty of '0'
         mvwaddstr(screen, opts_menu->y, opts_menu->x + opts_menu->width + 1, tmp_str);//print difficulty
 
         mvwaddstr(screen, opts_menu->y + 1, opts_menu->x + opts_menu->width + 1, game->sound ? "On " : "Off");//print sound
 
-        snprintf(tmp_str, MAX_STRING_LENGTH, "%d", game->sensitivity);
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%d ", game->sensitivity);
         mvwaddstr(screen, opts_menu->y + 2, opts_menu->x + opts_menu->width + 1, tmp_str);//print sensitivity
 
-        snprintf(tmp_str, MAX_STRING_LENGTH, "%dx%d", game->width, game->height);
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%dx%d", game->width, game->height); //Print the resolution
         mvwaddstr(screen, opts_menu->y + 3, opts_menu->x + opts_menu->width + 1, tmp_str);
+
+        mvwaddstr(screen, opts_menu->y + 4, opts_menu->x + opts_menu->width + 1, game->p1_aictrl ? "Computer" : "Human   ");
+
+        mvwaddstr(screen, opts_menu->y + 5, opts_menu->x + opts_menu->width + 1, game->p2_aictrl ? "Computer" : "Human   ");
+
+        snprintf(tmp_str, MAX_STRING_LENGTH, "%d ", game->max_score);
+        mvwaddstr(screen, opts_menu->y + 6, opts_menu->x + opts_menu->width + 1, tmp_str);
 
         //Write a helpful hint in the info_win
         switch (opts_menu->selected){
             case 0:
-                mvwaddstr(info_win, 1, 1, "Change the difficulty, higher numbers are more difficult");
-                break;
+                mvwaddstr(info_win, 1, 1, "Change the difficulty, higher numbers are more difficult"); break;
             case 1:
-                mvwaddstr(info_win, 1, 1, "Toggle sound on or off");
-                break;
+                mvwaddstr(info_win, 1, 1, "Toggle sound on or off"); break;
             case 2:
-                mvwaddstr(info_win, 1, 1, "Adjust paddle sensitivity, higher numbers are less sensitive");
-                break;
+                mvwaddstr(info_win, 1, 1, "Adjust paddle sensitivity, higher numbers are less sensitive"); break;
             case 3:
-                mvwaddstr(info_win, 1, 1, "Change the playing screen size");
-                break;
+                mvwaddstr(info_win, 1, 1, "Change the playing screen size"); break;
             case 4:
-                mvwaddstr(info_win, 1, 1, "Exit to main menu");
-                break;
+                mvwaddstr(info_win, 1, 1, "Toggle control between Computer and Human for the left paddle"); break;
+            case 5:
+                mvwaddstr(info_win, 1, 1, "Toggle control between Computer and Human for the right paddle"); break;
+            case 6:
+                mvwaddstr(info_win, 1, 1, "Change the maximum score needed to win"); break;
+            case 7:
+                mvwaddstr(info_win, 1, 1, "Save changes and go back to main menu"); break;
         }
 
         wrefresh(opts_menu->win);
         wrefresh(info_win);
     }
+
+    clear();
+    refresh();
     return game;
 }
 
@@ -985,7 +1089,7 @@ int main_menu(WINDOW* screen)
     int sound = SOUND_OFF;
 
     char* random_name = ai_names[randint(ai_names_c)];
-    struct Game* game = make_game(max_x, max_y, difficulty, sound, PADDLE_SENSITIVITY, random_name, getenv("USER"), MAX_SCORE);
+    struct Game* game = make_game(max_x, max_y, difficulty, sound, PADDLE_SENSITIVITY, random_name, getenv("USER"), 1, 0, DEFAULT_SCORE);
     int key;
     while (key != 'q'){
         switch (key = getch()){
@@ -1000,7 +1104,7 @@ int main_menu(WINDOW* screen)
             case KEY_ENTER:
                 switch (title_menu->selected){
                     case 0: //Play game
-                        play_game(game, 1);
+                        play_game(game);
                         break;
                     case 1: //Options
                         game = options_menu(screen, game, ball, paddle, max_x, max_y);
@@ -1030,6 +1134,8 @@ int main_menu(WINDOW* screen)
         wrefresh(title_menu->win);
     }
 
+    clear();
+    refresh();
     return 0;
 }
 

@@ -55,6 +55,9 @@
 #define MEDIUM_AI_WAIT 7
 #define HARD_AI_WAIT 5
 
+//The speed of the game...
+#define TICKS 8 //10
+
 #define INFO_WIN_HEIGHT 3
 #define LOWEST_XRES 40
 #define LOWEST_YRES 12
@@ -689,7 +692,7 @@ int play_game(struct Game* game)
         }
 
 
-        if ((sgl_timer_elapsed_milliseconds(timer) > 10) && !(game->paused || game_won)){
+        if ((sgl_timer_elapsed_milliseconds(timer) > TICKS) && !(game->paused || game_won)){
             sgl_timer_reset(timer);
             ai_wait++;
 
